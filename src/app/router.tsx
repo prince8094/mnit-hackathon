@@ -6,6 +6,7 @@ import { LoginPage } from '../pages/LoginPage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { NewProjectPage } from '../pages/NewProjectPage';
 import { ProjectDetailPage } from '../pages/ProjectDetailPage';
+import { VerifierDashboardPage } from '../pages/VerifierDashboardPage';
 import { PublicReportPage } from '../pages/PublicReportPage';
 import { store } from '../lib/store';
 
@@ -22,9 +23,59 @@ const Layout: React.FC = () => {
 };
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const user = store.getCurrentUser();
+  const [user, setUser] = React.useState(store.getCurrentUser());
+  const [checkingAuth, setCheckingAuth] = React.useState(
+    !user && (window.location.hash.includes('access_token') || window.location.search.includes('code='))
+  );
+
+  React.useEffect(() => {
+    const unsub = store.subscribe(() => {
+      const u = store.getCurrentUser();
+      setUser(u);
+      if (u) {
+        setCheckingAuth(false);
+      }
+    });
+
+    if (checkingAuth) {
+      const timer = setTimeout(() => {
+        setCheckingAuth(false);
+      }, 2500);
+      return () => {
+        unsub();
+        clearTimeout(timer);
+      };
+    }
+
+    return unsub;
+  }, [checkingAuth]);
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3">
+        <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-slate-600 font-medium">Verifying authentication session...</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = React.useState(store.getCurrentUser());
+
+  React.useEffect(() => {
+    return store.subscribe(() => {
+      setUser(store.getCurrentUser());
+    });
+  }, []);
+
+  if (user) {
+    return <Navigate to="/app" replace />;
   }
   return <>{children}</>;
 };
@@ -40,7 +91,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'login',
-        element: <LoginPage />
+        element: (
+          <PublicOnlyRoute>
+            <LoginPage />
+          </PublicOnlyRoute>
+        )
       },
       {
         path: 'app',
@@ -63,6 +118,14 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <ProjectDetailPage />
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: 'app/verifier',
+        element: (
+          <ProtectedRoute>
+            <VerifierDashboardPage />
           </ProtectedRoute>
         )
       },

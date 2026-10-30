@@ -7,6 +7,8 @@ node_modules/
 dist/
 dist-ssr/
 build/
+artifacts/
+cache/
 
 # Environment variables & secrets (CRITICAL: Never commit keys)
 .env

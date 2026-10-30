@@ -7,6 +7,9 @@ import {
   ProjectUpdate,
   ReportSnapshot,
   ReportAnchorRecord,
+  ProjectMilestone,
+  OnchainContribution,
+  MilestoneVerification,
   Role
 } from '../types';
 import { generateSanitisedSnapshot, computeReportHash } from './report-snapshot';
@@ -43,6 +46,10 @@ const INITIAL_PROJECT_A: Project = {
   purpose: 'Provide educational kits to underprivileged students across Rajasthan rural schools',
   goal_amount: 100000,
   currency: 'INR',
+  goal_amount_pol: 100,
+  contract_project_id: '0x15435ac7562dbb61738abcfcb04f0bebb5a3649410de72fffc269ee3e3c19d81',
+  ngo_wallet: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+  verifier_wallet: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
   start_date: '2026-10-01',
   end_date: '2026-10-31',
   public_slug: 'school-kit-support-2026',
@@ -186,6 +193,94 @@ const INITIAL_UPDATES: ProjectUpdate[] = [
   }
 ];
 
+const INITIAL_MILESTONES: ProjectMilestone[] = [
+  {
+    id: 'm1111111-0000-0000-0000-000000000001',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    milestone_index: 0,
+    title: 'Purchase educational materials',
+    allocated_pol: 40,
+    released_pol: 40,
+    status: 'RELEASED',
+    ipfs_cid: 'QmY3tKQVf2ZdNtQh6cJrn1cnaN6G5iHzX7kAfV6SsMuwRT',
+    evidence_hash: '0xa71b3e9f4c8d2a1b5e6f7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f',
+    submitted_at: '2026-10-15T10:00:00Z',
+    reviewed_at: '2026-10-16T14:30:00Z',
+    review_reason: 'Verified 60 stationery sets and school bags purchased from registered vendor with tax invoice.',
+    release_tx_hash: '0x8f7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5',
+    created_at: '2026-10-01T10:00:00Z'
+  },
+  {
+    id: 'm1111111-0000-0000-0000-000000000002',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    milestone_index: 1,
+    title: 'Distribution and logistics',
+    allocated_pol: 35,
+    released_pol: 0,
+    status: 'SUBMITTED',
+    ipfs_cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+    evidence_hash: '0xb82c4f0a5d9e3b2c6f7a8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a',
+    submitted_at: '2026-10-20T11:00:00Z',
+    reviewed_at: null,
+    review_reason: null,
+    release_tx_hash: null,
+    created_at: '2026-10-01T10:00:00Z'
+  },
+  {
+    id: 'm1111111-0000-0000-0000-000000000003',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    milestone_index: 2,
+    title: 'Final delivery and completion',
+    allocated_pol: 25,
+    released_pol: 0,
+    status: 'PENDING',
+    ipfs_cid: null,
+    evidence_hash: null,
+    submitted_at: null,
+    reviewed_at: null,
+    review_reason: null,
+    release_tx_hash: null,
+    created_at: '2026-10-01T10:00:00Z'
+  }
+];
+
+const INITIAL_ONCHAIN_CONTRIBUTIONS: OnchainContribution[] = [
+  {
+    id: 'c1111111-0000-0000-0000-000000000001',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    donor_wallet: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
+    amount_pol: 40,
+    tx_hash: '0x88f2a1b9c7d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6',
+    contributed_at: '2026-10-02T11:00:00Z'
+  },
+  {
+    id: 'c1111111-0000-0000-0000-000000000002',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    donor_wallet: '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65',
+    amount_pol: 60,
+    tx_hash: '0x99a3b2c1d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1',
+    contributed_at: '2026-10-04T15:30:00Z'
+  }
+];
+
+const INITIAL_VERIFICATIONS: MilestoneVerification[] = [
+  {
+    id: 'v1111111-0000-0000-0000-000000000001',
+    milestone_id: 'm1111111-0000-0000-0000-000000000001',
+    project_id: INITIAL_PROJECT_A.id,
+    verifier_wallet: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    approved: true,
+    review_reason: 'Verified 60 stationery sets and school bags purchased from registered vendor with tax invoice.',
+    tx_hash: '0x7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5a4',
+    reviewed_at: '2026-10-16T14:30:00Z'
+  }
+];
+
 interface RegisteredUser {
   id: string;
   email: string;
@@ -204,6 +299,9 @@ interface AppState {
   updates: ProjectUpdate[];
   snapshots: ReportSnapshot[];
   anchors: ReportAnchorRecord[];
+  milestones: ProjectMilestone[];
+  onchainContributions: OnchainContribution[];
+  verifications: MilestoneVerification[];
   currentUser: UserSession | null;
   users: RegisteredUser[];
 }
@@ -222,7 +320,11 @@ class Store {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.milestones || parsed.milestones.length === 0) parsed.milestones = INITIAL_MILESTONES;
+        if (!parsed.onchainContributions || parsed.onchainContributions.length === 0) parsed.onchainContributions = INITIAL_ONCHAIN_CONTRIBUTIONS;
+        if (!parsed.verifications) parsed.verifications = INITIAL_VERIFICATIONS;
+        return parsed;
       }
     } catch (e) {
       console.warn('Failed to load local storage state:', e);
@@ -237,6 +339,9 @@ class Store {
       updates: INITIAL_UPDATES,
       snapshots: [],
       anchors: [],
+      milestones: INITIAL_MILESTONES,
+      onchainContributions: INITIAL_ONCHAIN_CONTRIBUTIONS,
+      verifications: INITIAL_VERIFICATIONS,
       currentUser: {
         id: 'u-admin-1',
         email: 'priya.sharma@sevajyoti.org',
@@ -268,6 +373,14 @@ class Store {
           passwordHash: 'demo-password',
           fullName: 'Vikram Malhotra',
           organizationId: INITIAL_ORG_B.id,
+          role: 'ADMIN'
+        },
+        {
+          id: 'u-verifier-1',
+          email: 'dr.sunita.rao@auditors-india.org',
+          passwordHash: 'demo-password',
+          fullName: 'Dr. Sunita Rao (Independent Auditor)',
+          organizationId: INITIAL_ORG_A.id,
           role: 'ADMIN'
         }
       ]
@@ -530,7 +643,7 @@ class Store {
     return this.state.currentUser;
   }
 
-  public loginAs(roleOrUser: 'ADMIN' | 'STAFF' | 'NGO_B'): void {
+  public loginAs(roleOrUser: 'ADMIN' | 'STAFF' | 'NGO_B' | 'VERIFIER'): void {
     if (roleOrUser === 'ADMIN') {
       this.state.currentUser = {
         id: 'u-admin-1',
@@ -548,6 +661,15 @@ class Store {
         role: 'STAFF',
         organizationId: INITIAL_ORG_A.id,
         organizationName: INITIAL_ORG_A.name
+      };
+    } else if (roleOrUser === 'VERIFIER') {
+      this.state.currentUser = {
+        id: 'u-verifier-1',
+        email: 'dr.sunita.rao@auditors-india.org',
+        fullName: 'Dr. Sunita Rao',
+        role: 'ADMIN',
+        organizationId: INITIAL_ORG_A.id,
+        organizationName: 'Independent Social Audit Cell'
       };
     } else {
       this.state.currentUser = {
@@ -572,7 +694,15 @@ class Store {
   public getProjects(orgId?: string): Project[] {
     const targetOrg = orgId || this.state.currentUser?.organizationId;
     if (!targetOrg) return [];
-    return this.state.projects.filter(p => p.organization_id === targetOrg);
+
+    const isNgoB = this.state.currentUser?.id === 'u-admin-ngo-b' || targetOrg === INITIAL_ORG_B.id;
+    if (isNgoB) {
+      return this.state.projects.filter(p => p.organization_id === targetOrg);
+    }
+
+    return this.state.projects.filter(p => 
+      p.organization_id === targetOrg || p.id === INITIAL_PROJECT_A.id
+    );
   }
 
   public getProjectById(projectId: string): Project | undefined {
@@ -876,6 +1006,112 @@ class Store {
     }
 
     return record;
+  }
+
+  // --- Milestones ---
+  public getMilestones(projectId: string): ProjectMilestone[] {
+    return (this.state.milestones || [])
+      .filter(m => m.project_id === projectId)
+      .sort((a, b) => a.milestone_index - b.milestone_index);
+  }
+
+  public getAllMilestones(): ProjectMilestone[] {
+    return this.state.milestones || [];
+  }
+
+  public async addMilestone(data: Omit<ProjectMilestone, 'id' | 'created_at'>): Promise<ProjectMilestone> {
+    const milestone: ProjectMilestone = {
+      ...data,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString()
+    };
+    if (!this.state.milestones) this.state.milestones = [];
+    this.state.milestones.push(milestone);
+    this.saveState();
+
+    if (supabase) {
+      try {
+        await supabase.from('project_milestones').insert([milestone]);
+      } catch (e) {
+        console.warn('Supabase milestone insert notice:', e);
+      }
+    }
+    return milestone;
+  }
+
+  public async updateMilestone(milestoneId: string, updates: Partial<ProjectMilestone>): Promise<ProjectMilestone> {
+    if (!this.state.milestones) this.state.milestones = [];
+    const idx = this.state.milestones.findIndex(m => m.id === milestoneId);
+    if (idx === -1) throw new Error('Milestone not found');
+
+    this.state.milestones[idx] = {
+      ...this.state.milestones[idx],
+      ...updates
+    };
+    this.saveState();
+
+    if (supabase) {
+      try {
+        await supabase.from('project_milestones').update(updates).eq('id', milestoneId);
+      } catch (e) {
+        console.warn('Supabase milestone update notice:', e);
+      }
+    }
+    return this.state.milestones[idx];
+  }
+
+  // --- Onchain Contributions ---
+  public getOnchainContributions(projectId: string): OnchainContribution[] {
+    return (this.state.onchainContributions || [])
+      .filter(c => c.project_id === projectId)
+      .sort((a, b) => new Date(b.contributed_at).getTime() - new Date(a.contributed_at).getTime());
+  }
+
+  public async addOnchainContribution(data: Omit<OnchainContribution, 'id' | 'contributed_at'>): Promise<OnchainContribution> {
+    const contribution: OnchainContribution = {
+      ...data,
+      id: crypto.randomUUID(),
+      contributed_at: new Date().toISOString()
+    };
+    if (!this.state.onchainContributions) this.state.onchainContributions = [];
+    this.state.onchainContributions.push(contribution);
+    this.saveState();
+
+    if (supabase) {
+      try {
+        await supabase.from('onchain_contributions').insert([contribution]);
+      } catch (e) {
+        console.warn('Supabase contribution insert notice:', e);
+      }
+    }
+    return contribution;
+  }
+
+  // --- Milestone Verifications ---
+  public getMilestoneVerifications(projectId: string): MilestoneVerification[] {
+    return (this.state.verifications || [])
+      .filter(v => v.project_id === projectId)
+      .sort((a, b) => new Date(b.reviewed_at).getTime() - new Date(a.reviewed_at).getTime());
+  }
+
+  public async addMilestoneVerification(data: Omit<MilestoneVerification, 'id' | 'reviewed_at'>): Promise<MilestoneVerification> {
+    const verification: MilestoneVerification = {
+      ...data,
+      id: crypto.randomUUID(),
+      reviewed_at: new Date().toISOString()
+    };
+    if (!this.state.verifications) this.state.verifications = [];
+    this.state.verifications.push(verification);
+    this.saveState();
+
+    if (supabase) {
+      try {
+        await supabase.from('milestone_verifications').insert([verification]);
+      } catch (e) {
+        console.warn('Supabase verification insert notice:', e);
+      }
+    }
+    return verification;
   }
 
   // --- Demo Verification Helper: Tamper Simulator for Test T13 ---

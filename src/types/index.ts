@@ -28,7 +28,53 @@ export interface Project {
   end_date?: string | null;
   public_slug: string;
   status: ProjectStatus;
+  contract_project_id?: string | null;
+  onchain_escrow_address?: string | null;
+  ngo_wallet?: string | null;
+  verifier_wallet?: string | null;
+  goal_amount_pol?: number | null;
   created_at: string;
+}
+
+export type OnchainMilestoneStatus = 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'RELEASED';
+
+export interface ProjectMilestone {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  milestone_index: number;
+  title: string;
+  allocated_pol: number;
+  released_pol: number;
+  status: OnchainMilestoneStatus;
+  ipfs_cid?: string | null;
+  evidence_hash?: string | null;
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
+  review_reason?: string | null;
+  release_tx_hash?: string | null;
+  created_at: string;
+}
+
+export interface OnchainContribution {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  donor_wallet: string;
+  amount_pol: number;
+  tx_hash: string;
+  contributed_at: string;
+}
+
+export interface MilestoneVerification {
+  id: string;
+  milestone_id: string;
+  project_id: string;
+  verifier_wallet: string;
+  approved: boolean;
+  review_reason: string;
+  tx_hash?: string | null;
+  reviewed_at: string;
 }
 
 export type DonationChannel = 'UPI' | 'Bank transfer' | 'Crowdfunding' | 'Cash' | 'Cheque' | 'Other';

@@ -22,10 +22,14 @@ export const Navbar: React.FC = () => {
     });
   }, []);
 
-  const handleRoleSwitch = (type: 'ADMIN' | 'STAFF' | 'NGO_B') => {
+  const handleRoleSwitch = (type: 'ADMIN' | 'STAFF' | 'NGO_B' | 'VERIFIER') => {
     store.loginAs(type);
     setDropdownOpen(false);
-    navigate('/app');
+    if (type === 'VERIFIER') {
+      navigate('/app/verifier');
+    } else {
+      navigate('/app');
+    }
   };
 
   const handleLogout = () => {
@@ -91,6 +95,15 @@ export const Navbar: React.FC = () => {
                   }`}
                 >
                   School Kit Project
+                </Link>
+                <Link 
+                  to="/app/verifier" 
+                  className={`px-3 py-1.5 rounded-md hover:text-slate-900 hover:bg-slate-100 transition-colors flex items-center gap-1.5 ${
+                    location.pathname === '/app/verifier' ? 'bg-slate-100 text-slate-900 font-semibold' : ''
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                  <span>Verifier Portal</span>
                 </Link>
               </nav>
             )}
@@ -167,6 +180,15 @@ export const Navbar: React.FC = () => {
                       >
                         <span>Vikram Malhotra (NGO B Admin)</span>
                         {user.id === 'u-admin-ngo-b' && <span className="text-[10px] text-purple-600">Active</span>}
+                      </button>
+                      <button
+                        onClick={() => handleRoleSwitch('VERIFIER')}
+                        className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-indigo-50 ${
+                          user.id === 'u-verifier-1' ? 'font-bold text-indigo-700 bg-indigo-50' : 'text-indigo-900'
+                        }`}
+                      >
+                        <span>Dr. Sunita Rao (Independent Verifier)</span>
+                        {user.id === 'u-verifier-1' && <span className="text-[10px] text-indigo-600">Active</span>}
                       </button>
                     </div>
 

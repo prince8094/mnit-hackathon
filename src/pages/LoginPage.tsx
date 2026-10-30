@@ -24,6 +24,18 @@ export const LoginPage: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // If already authenticated, redirect immediately to dashboard
+  React.useEffect(() => {
+    if (store.getCurrentUser()) {
+      navigate('/app', { replace: true });
+    }
+    return store.subscribe(() => {
+      if (store.getCurrentUser()) {
+        navigate('/app', { replace: true });
+      }
+    });
+  }, [navigate]);
+
   const handleDemoLogin = (type: 'ADMIN' | 'STAFF' | 'NGO_B') => {
     store.loginAs(type);
     navigate('/app');
