@@ -3,12 +3,11 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { store, UserSession } from '../../lib/store';
 import { 
   ShieldCheck, 
-  User, 
   LogOut, 
   RotateCcw, 
   ExternalLink,
-  Layers,
-  ChevronDown
+  ChevronDown,
+  Building
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -23,9 +22,10 @@ export const Navbar: React.FC = () => {
     });
   }, []);
 
-  const handleRoleSwitch = (role: 'ADMIN' | 'STAFF') => {
-    store.loginAs(role);
+  const handleRoleSwitch = (type: 'ADMIN' | 'STAFF' | 'NGO_B') => {
+    store.loginAs(type);
     setDropdownOpen(false);
+    navigate('/app');
   };
 
   const handleLogout = () => {
@@ -41,13 +41,11 @@ export const Navbar: React.FC = () => {
     }
   };
 
-  const isPublicRoute = location.pathname.startsWith('/r/');
-
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
-      {/* Top Banner: Synthetic Demo Data Warning as required by Section 15 */}
+      {/* Top Banner: Synthetic Demo Data Warning */}
       <div className="bg-amber-500 text-white text-xs font-semibold py-1 px-4 text-center tracking-wide flex items-center justify-center gap-2">
-        <span>⚠️ SYNTHETIC DEMO DATASET — Seva Jyoti Foundation (Non-production prototype)</span>
+        <span>⚠️ SYNTHETIC DEMO DATASET — {user?.organizationName || 'Seva Jyoti Foundation'}</span>
         <button
           onClick={handleResetData}
           className="underline hover:text-amber-100 flex items-center gap-1 text-[11px] ml-2"
@@ -122,42 +120,53 @@ export const Navbar: React.FC = () => {
                   </div>
                   <div className="text-left hidden sm:block">
                     <div className="font-semibold text-slate-800 leading-tight">{user.fullName}</div>
-                    <div className="text-[10px] text-slate-500 leading-none">{user.role === 'ADMIN' ? 'NGO Admin' : 'NGO Staff'}</div>
+                    <div className="text-[10px] text-slate-500 leading-none">
+                      {user.organizationName || 'NGO'} ({user.role})
+                    </div>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 </button>
 
                 {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-50 text-xs">
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-50 text-xs">
                     <div className="px-3 py-2 border-b border-slate-100">
                       <p className="font-semibold text-slate-800">{user.fullName}</p>
                       <p className="text-slate-500 text-[11px] truncate">{user.email}</p>
                       <span className="inline-block mt-1 px-2 py-0.5 rounded-xs text-[10px] font-medium bg-slate-100 text-slate-700">
-                        Org: Seva Jyoti Foundation
+                        Org: {user.organizationName || 'NGO'}
                       </span>
                     </div>
 
                     <div className="py-1">
                       <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        Switch Demo Role
+                        Switch Demo Archetype / Org
                       </div>
                       <button
                         onClick={() => handleRoleSwitch('ADMIN')}
                         className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 ${
-                          user.role === 'ADMIN' ? 'font-bold text-emerald-700 bg-emerald-50/50' : 'text-slate-700'
+                          user.id === 'u-admin-1' ? 'font-bold text-emerald-700 bg-emerald-50/50' : 'text-slate-700'
                         }`}
                       >
-                        <span>Priya Sharma (Admin)</span>
-                        {user.role === 'ADMIN' && <span className="text-[10px] text-emerald-600">Active</span>}
+                        <span>Priya Sharma (NGO A Admin)</span>
+                        {user.id === 'u-admin-1' && <span className="text-[10px] text-emerald-600">Active</span>}
                       </button>
                       <button
                         onClick={() => handleRoleSwitch('STAFF')}
                         className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-slate-50 ${
-                          user.role === 'STAFF' ? 'font-bold text-emerald-700 bg-emerald-50/50' : 'text-slate-700'
+                          user.id === 'u-staff-2' ? 'font-bold text-emerald-700 bg-emerald-50/50' : 'text-slate-700'
                         }`}
                       >
-                        <span>Amit Verma (Staff)</span>
-                        {user.role === 'STAFF' && <span className="text-[10px] text-emerald-600">Active</span>}
+                        <span>Amit Verma (NGO A Staff)</span>
+                        {user.id === 'u-staff-2' && <span className="text-[10px] text-emerald-600">Active</span>}
+                      </button>
+                      <button
+                        onClick={() => handleRoleSwitch('NGO_B')}
+                        className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-purple-50 ${
+                          user.id === 'u-admin-ngo-b' ? 'font-bold text-purple-700 bg-purple-50' : 'text-purple-900'
+                        }`}
+                      >
+                        <span>Vikram Malhotra (NGO B Admin)</span>
+                        {user.id === 'u-admin-ngo-b' && <span className="text-[10px] text-purple-600">Active</span>}
                       </button>
                     </div>
 
@@ -187,4 +196,3 @@ export const Navbar: React.FC = () => {
     </header>
   );
 };
-

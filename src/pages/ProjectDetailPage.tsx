@@ -104,6 +104,16 @@ export const ProjectDetailPage: React.FC = () => {
   const [anchorSuccessTx, setAnchorSuccessTx] = useState<string | null>(null);
   const [anchorError, setAnchorError] = useState<string | null>(null);
 
+  // Edit Project Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editPurpose, setEditPurpose] = useState('');
+  const [editGoal, setEditGoal] = useState('');
+  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'COMPLETED' | 'ARCHIVED'>('ACTIVE');
+  const [editEndDate, setEditEndDate] = useState('');
+
+  const currentUser = store.getCurrentUser();
+
   useEffect(() => {
     if (!id) return;
     const loadData = () => {
@@ -113,6 +123,11 @@ export const ProjectDetailPage: React.FC = () => {
         return;
       }
       setProject(p);
+      setEditTitle(p.title);
+      setEditPurpose(p.purpose);
+      setEditGoal(p.goal_amount.toString());
+      setEditStatus(p.status);
+      setEditEndDate(p.end_date || '');
       setDonations(store.getDonations(id));
       setExpenses(store.getExpenses(id));
       setEvidenceFiles(store.getEvidenceFiles(id));
@@ -134,7 +149,7 @@ export const ProjectDetailPage: React.FC = () => {
     e.preventDefault();
     const amount = parseFloat(donationAmount);
     if (isNaN(amount) || amount <= 0) {
-      alert('Amount must be a positive number');
+      alert('Please enter a valid donation amount greater than ₹0.00 (positive numbers only).');
       return;
     }
 
@@ -147,7 +162,7 @@ export const ProjectDetailPage: React.FC = () => {
     store.addDonation({
       organization_id: project.organization_id,
       project_id: project.id,
-      amount_received: amount,
+      amount_received: Number(amount.toFixed(2)),
       received_at: donationDate,
       channel: donationChannel,
       source_reference: donationRef.trim() || null,
@@ -159,6 +174,32 @@ export const ProjectDetailPage: React.FC = () => {
     setDonationDonorLabel('');
     setDonationSuccessMsg(`Recorded donation of ${formatINR(amount)} successfully.`);
     setTimeout(() => setDonationSuccessMsg(null), 4000);
+  };
+
+  // Handle Edit Project Submit
+  const handleEditProjectSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const goal = parseFloat(editGoal);
+    if (isNaN(goal) || goal <= 0) {
+      alert('Funding goal must be a positive number.');
+      return;
+    }
+    store.editProject(project.id, {
+      title: editTitle.trim(),
+      purpose: editPurpose.trim(),
+      goal_amount: goal,
+      status: editStatus,
+      end_date: editEndDate || null
+    });
+    setShowEditModal(false);
+    alert('Project details updated successfully.');
+  };
+
+  const handleArchiveProject = () => {
+    if (confirm('Archive this project? Historical donation and expenditure records will be safely preserved.')) {
+      store.archiveProject(project.id);
+      setShowEditModal(false);
+    }
   };
 
   // 2. Handle CSV File Selection & Parse
@@ -206,7 +247,7 @@ export const ProjectDetailPage: React.FC = () => {
   };
 
   // 3. Handle Expense Submit
-  const handleExpenseSubmit = (e: React.FormEvent) => {
+  const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(expenseAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -214,7 +255,7 @@ export const ProjectDetailPage: React.FC = () => {
       return;
     }
 
-    const created = store.addExpense({
+    const created = await store.addExpense({
       organization_id: project.organization_id,
       project_id: project.id,
       amount,
@@ -239,8 +280,22 @@ export const ProjectDetailPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const lowerName = file.name.toLowerCase();
+    const isSupported = validExtensions.some(ext => lowerName.endsWith(ext));
+    if (!isSupported) {
+      alert(`Unsupported file format "${file.name}". Only PDF invoices and image receipts (JPG, PNG) are permitted.`);
+      e.target.value = '';
+      setEvidenceFile(null);
+      setEvidenceComputedHash(null);
+      return;
+    }
+
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit.');
+      alert(`File exceeds the maximum 5 MB limit (size: ${(file.size / (1024 * 1024)).toFixed(1)} MB). Please select a file under 5 MB.`);
+      e.target.value = '';
+      setEvidenceFile(null);
+      setEvidenceComputedHash(null);
       return;
     }
 
@@ -276,7 +331,7 @@ export const ProjectDetailPage: React.FC = () => {
       evidence_type: evidenceType,
       visibility: 'PRIVATE',
       review_status: 'DOCUMENT_UPLOADED'
-    });
+    }, evidenceFile);
 
     setEvidenceFile(null);
     setEvidenceComputedHash(null);
@@ -376,6 +431,33 @@ export const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  // Multi-Tenant Isolation Check (Security Test: NGO B cannot access NGO A's records)
+  if (currentUser && project.organization_id !== currentUser.organizationId) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-4">
+        <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Access Denied: Cross-Tenant Boundary Enforced</h2>
+        <p className="text-xs text-slate-600 leading-relaxed max-w-lg mx-auto">
+          This project belongs to another organization. You are currently signed in as <strong>{currentUser.fullName} ({currentUser.organizationName || 'NGO'})</strong>. 
+          Under Supabase Row Level Security (RLS) policies, accounts cannot view, access, or mutate another organization&apos;s project records.
+        </p>
+        <div className="pt-2 flex justify-center gap-3">
+          <Link to="/app" className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg">
+            Return to Dashboard
+          </Link>
+          <button 
+            onClick={() => store.loginAs('ADMIN')}
+            className="px-4 py-2 text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg"
+          >
+            Switch to NGO A (Priya Sharma)
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Breadcrumb & Title */}
@@ -390,7 +472,13 @@ export const ProjectDetailPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                project.status === 'ACTIVE' 
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : project.status === 'ARCHIVED'
+                  ? 'bg-slate-200 text-slate-800 border-slate-300'
+                  : 'bg-blue-100 text-blue-800 border-blue-300'
+              }`}>
                 {project.status}
               </span>
               <span className="text-xs text-slate-500 font-mono">
@@ -402,6 +490,13 @@ export const ProjectDetailPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition shadow-xs"
+            >
+              <span>Edit Project Details</span>
+            </button>
+
             {snapshots.length > 0 && (
               <Link
                 to={`/r/${snapshots[0].public_slug}`}
@@ -1341,6 +1436,114 @@ export const ProjectDetailPage: React.FC = () => {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PROJECT MODAL */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">Edit Project Details</h3>
+                <p className="text-xs text-slate-500">Update project attributes or archive the project.</p>
+              </div>
+              <button 
+                onClick={() => setShowEditModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditProjectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Project Title *</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Purpose & Description *</label>
+                <textarea
+                  rows={3}
+                  value={editPurpose}
+                  onChange={(e) => setEditPurpose(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Target Funding Goal (INR ₹) *</label>
+                  <input
+                    type="number"
+                    value={editGoal}
+                    onChange={(e) => setEditGoal(e.target.value)}
+                    min="1"
+                    step="any"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="ARCHIVED">ARCHIVED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Target End Date</label>
+                <input
+                  type="date"
+                  value={editEndDate}
+                  onChange={(e) => setEditEndDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleArchiveProject}
+                  className="px-3 py-1.5 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg"
+                >
+                  Archive Project
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

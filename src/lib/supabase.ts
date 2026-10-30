@@ -19,5 +19,47 @@ export const isSupabaseConfigured = Boolean(
 );
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    })
   : null;
+
+/**
+ * Initiates Google OAuth Sign-In via Supabase
+ */
+export async function signInWithGoogle(): Promise<{ url: string | null }> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.');
+  }
+
+  const redirectUrl = `${window.location.origin}/app`;
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: redirectUrl,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      }
+    }
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return { url: data.url };
+}
+
+/**
+ * Sign out of active Supabase Auth session
+ */
+export async function signOutFromSupabase(): Promise<void> {
+  if (supabase) {
+    await supabase.auth.signOut();
+  }
+}

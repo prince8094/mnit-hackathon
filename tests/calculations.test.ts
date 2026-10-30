@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateFinancialSummary } from '../src/lib/report-snapshot';
 import { canonicalizeJson, sha256Hex, computeProjectKey } from '../src/lib/hashing';
-import { Donation, Expense, EvidenceFile } from '../src/types';
+import { Donation, Expense, EvidenceFile, Project } from '../src/types';
 
 describe('Financial Calculations & Summaries', () => {
   const donations: Donation[] = [
@@ -138,5 +138,19 @@ describe('Financial Calculations & Summaries', () => {
     expect(summary.remaining).toBe(-45000);
     expect(summary.remaining < 0).toBe(true);
   });
-});
 
+  it('handles decimal donations like ₹10.50 with precision', () => {
+    const decimalDonation: Donation = {
+      id: 'd-dec',
+      organization_id: 'org1',
+      project_id: 'proj1',
+      amount_received: 10.50,
+      received_at: '2026-10-06',
+      channel: 'UPI',
+      created_at: '2026-10-06'
+    };
+    const summary = calculateFinancialSummary([...donations, decimalDonation], expenses, evidenceFiles);
+    expect(summary.totalReceived).toBe(100010.50);
+    expect(summary.remaining).toBe(35010.50);
+  });
+});

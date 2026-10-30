@@ -28,7 +28,7 @@ export const NewProjectPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
       navigate('/login');
@@ -47,7 +47,7 @@ export const NewProjectPage: React.FC = () => {
     }
 
     try {
-      const project = store.addProject({
+      const project = await store.addProject({
         organization_id: user.organizationId,
         title: title.trim(),
         purpose: purpose.trim(),
