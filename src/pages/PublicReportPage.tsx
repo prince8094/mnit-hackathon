@@ -212,8 +212,8 @@ export const PublicReportPage: React.FC = () => {
 
     setContributeLoading(true);
     try {
-      let txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      let donorAddress = '0x' + Array.from({length: 40}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      let txHash: string | null = null;
+      let donorAddress = '0xAnonymousDonor';
 
       if (isMetaMaskInstalled()) {
         try {
@@ -227,6 +227,7 @@ export const PublicReportPage: React.FC = () => {
           donorAddress = res.donorAddress;
         } catch (web3Err: any) {
           console.warn('Web3 contribution error:', web3Err);
+          throw new Error(web3Err.message || 'On-chain contribution transaction failed in MetaMask.');
         }
       }
 
@@ -559,15 +560,19 @@ export const PublicReportPage: React.FC = () => {
                       {new Date(c.contributed_at).toLocaleDateString()}
                     </td>
                     <td className="py-2 px-3">
-                      <a
-                        href={getAmoyExplorerTxUrl(c.tx_hash)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-emerald-400 underline inline-flex items-center gap-0.5"
-                      >
-                        <span>{c.tx_hash.slice(0, 8)}...</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
+                      {c.tx_hash ? (
+                        <a
+                          href={getAmoyExplorerTxUrl(c.tx_hash)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-emerald-400 underline inline-flex items-center gap-0.5"
+                        >
+                          <span>{c.tx_hash.slice(0, 8)}...</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-500 font-sans">Off-chain</span>
+                      )}
                     </td>
                   </tr>
                 ))}

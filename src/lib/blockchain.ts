@@ -53,8 +53,8 @@ export interface WalletState {
   error: string | null;
 }
 
-export function getAmoyExplorerTxUrl(txHash: string): string {
-  if (!txHash) return '#';
+export function getAmoyExplorerTxUrl(txHash: string | null | undefined): string {
+  if (!txHash || !txHash.startsWith('0x') || txHash.length < 66) return '#';
   return `${DEFAULT_AMOY_EXPLORER}/tx/${txHash}`;
 }
 

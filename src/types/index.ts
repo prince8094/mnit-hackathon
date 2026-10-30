@@ -62,7 +62,7 @@ export interface OnchainContribution {
   project_id: string;
   donor_wallet: string;
   amount_pol: number;
-  tx_hash: string;
+  tx_hash: string | null;
   contributed_at: string;
 }
 

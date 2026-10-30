@@ -43,7 +43,7 @@ export const VerifierDashboardPage: React.FC = () => {
   const [selectedMilestone, setSelectedMilestone] = useState<ProjectMilestone | null>(null);
   const [reviewReason, setReviewReason] = useState<string>('Verified independent invoices and distribution photos on IPFS.');
   const [verifyingInProgress, setVerifyingInProgress] = useState<boolean>(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; txHash?: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; txHash?: string | null } | null>(null);
 
   useEffect(() => {
     return store.subscribe(() => {
@@ -126,7 +126,7 @@ export const VerifierDashboardPage: React.FC = () => {
 
     setVerifyingInProgress(true);
     try {
-      let txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      let txHash: string | null = null;
       let verifierUsed = walletAddress || '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 
       // If MetaMask is installed and connected to Amoy, attempt real on-chain transaction

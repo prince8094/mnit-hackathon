@@ -523,7 +523,7 @@ export const ProjectDetailPage: React.FC = () => {
       const cid = ipfsRes.cid;
       const evidenceHash = milestoneFileHash;
 
-      let txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      let txHash: string | null = null;
 
       if (isMetaMaskInstalled() && walletAddress && isAmoyNetwork) {
         try {
@@ -574,7 +574,7 @@ export const ProjectDetailPage: React.FC = () => {
 
     setReleasingMilestoneId(milestone.id);
     try {
-      let txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      let txHash: string | null = null;
 
       if (isMetaMaskInstalled() && walletAddress && isAmoyNetwork) {
         try {
@@ -595,7 +595,11 @@ export const ProjectDetailPage: React.FC = () => {
         release_tx_hash: txHash
       });
 
-      alert(`Funds released! ${milestone.allocated_pol} POL transferred to NGO wallet.\nTx: ${txHash}`);
+      alert(
+        txHash
+          ? `Funds released! ${milestone.allocated_pol} POL transferred to NGO wallet on Polygon Amoy.\nTx: ${txHash}`
+          : `Funds released! ${milestone.allocated_pol} POL unlocked to NGO wallet.`
+      );
     } catch (err: any) {
       alert(`Release failed: ${err.message}`);
     } finally {
@@ -617,8 +621,8 @@ export const ProjectDetailPage: React.FC = () => {
     setContributeSuccessMsg(null);
 
     try {
-      let txHash = '0x' + Array.from({length: 64}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      let donorAddress = walletAddress || '0x' + Array.from({length: 40}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      let txHash: string | null = null;
+      let donorAddress = walletAddress || '0xDemoDonorWallet';
 
       if (isMetaMaskInstalled()) {
         try {
@@ -632,6 +636,7 @@ export const ProjectDetailPage: React.FC = () => {
           donorAddress = res.donorAddress;
         } catch (web3Err: any) {
           console.warn('Web3 contribution error:', web3Err);
+          throw new Error(web3Err.message || 'On-chain contribution was rejected or failed.');
         }
       }
 
@@ -1161,15 +1166,19 @@ export const ProjectDetailPage: React.FC = () => {
                         {formatDate(c.contributed_at)}
                       </td>
                       <td className="py-2.5 px-3">
-                        <a
-                          href={getAmoyExplorerTxUrl(c.tx_hash)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-emerald-700 underline font-semibold inline-flex items-center gap-1"
-                        >
-                          {c.tx_hash.slice(0, 8)}...
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                        {c.tx_hash ? (
+                          <a
+                            href={getAmoyExplorerTxUrl(c.tx_hash)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-700 underline font-semibold inline-flex items-center gap-1"
+                          >
+                            {c.tx_hash.slice(0, 8)}...
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 font-sans">Off-chain deposit</span>
+                        )}
                       </td>
                     </tr>
                   ))}
