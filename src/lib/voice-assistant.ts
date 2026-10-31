@@ -353,3 +353,247 @@ export function speakText(text: string, lang: AssistantLanguage): void {
 
   window.speechSynthesis.speak(utterance);
 }
+
+/**
+ * Browser Audio Recorder (MediaRecorder API for Google Gemini Voice STT)
+ */
+export class AudioRecorderService {
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+  private mediaStream: MediaStream | null = null;
+  private timeoutTimer: any = null;
+  public isRecording: boolean = false;
+
+  public static isSupported(): boolean {
+    return (
+      typeof window !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function' && typeof window.MediaRecorder === 'function')
+    );
+  }
+
+  public async startRecording(
+    maxDurationSeconds = 20,
+    onTimeout?: () => void
+  ): Promise<void> {
+    if (!AudioRecorderService.isSupported()) {
+      throw new Error('Microphone audio recording is not supported in this browser.');
+    }
+
+    this.audioChunks = [];
+
+    // Request microphone access
+    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        channelCount: 1,
+      },
+    });
+
+    // Detect supported MIME type
+    let mimeType = 'audio/webm';
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      mimeType = 'audio/webm;codecs=opus';
+    } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+      mimeType = 'audio/mp4';
+    } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+      mimeType = 'audio/ogg';
+    }
+
+    this.mediaRecorder = new MediaRecorder(this.mediaStream, { mimeType });
+
+    this.mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        this.audioChunks.push(event.data);
+      }
+    };
+
+    this.mediaRecorder.start(250); // Slice into 250ms chunks
+    this.isRecording = true;
+
+    // Safety timeout
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
+    this.timeoutTimer = setTimeout(() => {
+      if (this.isRecording) {
+        if (onTimeout) onTimeout();
+      }
+    }, maxDurationSeconds * 1000);
+  }
+
+  public async stopRecording(): Promise<Blob> {
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
+
+    return new Promise((resolve, reject) => {
+      if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+        this.cleanup();
+        reject(new Error('Media recorder is not active.'));
+        return;
+      }
+
+      this.mediaRecorder.onstop = () => {
+        const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
+        const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+        this.cleanup();
+        resolve(audioBlob);
+      };
+
+      try {
+        this.mediaRecorder.stop();
+      } catch (err) {
+        this.cleanup();
+        reject(err);
+      }
+    });
+  }
+
+  private cleanup(): void {
+    this.isRecording = false;
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((track) => track.stop());
+      this.mediaStream = null;
+    }
+    this.mediaRecorder = null;
+  }
+}
+
+// In-memory session cache for synthesized Gemini audio: textHash -> dataUrl
+const sessionAudioCache = new Map<string, string>();
+let currentlyPlayingAudio: HTMLAudioElement | null = null;
+
+/**
+ * Converts a Blob to a base64 string
+ */
+export async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.includes(';base64,') ? dataUrl.split(';base64,')[1] : dataUrl;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Transcribes audio via server-side Google Gemini STT
+ */
+export async function transcribeAudioWithGemini(
+  audioBlob: Blob,
+  language: AssistantLanguage
+): Promise<{ text: string }> {
+  const base64 = await blobToBase64(audioBlob);
+
+  const res = await fetch('/api/voice/transcribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      audioBase64: base64,
+      mimeType: audioBlob.type || 'audio/webm',
+      language,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to transcribe audio with Google Gemini');
+  }
+
+  return { text: data.text || '' };
+}
+
+/**
+ * Synthesizes speech via server-side Google Gemini TTS with session caching
+ */
+export async function synthesizeSpeechWithGemini(
+  text: string,
+  language: AssistantLanguage
+): Promise<string> {
+  const cacheKey = `${language}:${text.trim()}`;
+  if (sessionAudioCache.has(cacheKey)) {
+    return sessionAudioCache.get(cacheKey)!;
+  }
+
+  const res = await fetch('/api/voice/speak', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text,
+      language,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success || !data.audioBase64) {
+    throw new Error(data.error || 'Failed to generate speech with Google Gemini');
+  }
+
+  const mime = data.mimeType || 'audio/wav';
+  const dataUrl = `data:${mime};base64,${data.audioBase64}`;
+  sessionAudioCache.set(cacheKey, dataUrl);
+  return dataUrl;
+}
+
+/**
+ * Stops any currently active audio playback
+ */
+export function stopCurrentAudioPlayback(): void {
+  if (currentlyPlayingAudio) {
+    try {
+      currentlyPlayingAudio.pause();
+      currentlyPlayingAudio.currentTime = 0;
+    } catch {}
+    currentlyPlayingAudio = null;
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+/**
+ * Plays response using Google Gemini TTS with fallback to browser SpeechSynthesis
+ */
+export async function playOrSpeakResponse(
+  text: string,
+  lang: AssistantLanguage,
+  callbacks?: {
+    onStart?: () => void;
+    onEnd?: () => void;
+    onError?: (err: any) => void;
+  }
+): Promise<void> {
+  stopCurrentAudioPlayback();
+
+  try {
+    if (callbacks?.onStart) callbacks.onStart();
+
+    // 1. Try Google Gemini Voice TTS endpoint
+    const audioDataUrl = await synthesizeSpeechWithGemini(text, lang);
+    const audio = new Audio(audioDataUrl);
+    currentlyPlayingAudio = audio;
+
+    audio.onended = () => {
+      currentlyPlayingAudio = null;
+      if (callbacks?.onEnd) callbacks.onEnd();
+    };
+
+    audio.onerror = () => {
+      currentlyPlayingAudio = null;
+      // Fallback to browser SpeechSynthesis if audio element fails to play
+      speakText(text, lang);
+      if (callbacks?.onEnd) callbacks.onEnd();
+    };
+
+    await audio.play();
+  } catch (err: any) {
+    // 2. Graceful fallback to browser speech synthesis if server endpoint unavailable / pending key
+    try {
+      speakText(text, lang);
+      if (callbacks?.onEnd) callbacks.onEnd();
+    } catch (fallbackErr) {
+      if (callbacks?.onError) callbacks.onError(fallbackErr);
+    }
+  }
+}

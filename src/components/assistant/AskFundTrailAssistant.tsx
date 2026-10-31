@@ -6,30 +6,44 @@ import {
   Send,
   X,
   Volume2,
+  VolumeX,
   ExternalLink,
   Sparkles,
   ShieldCheck,
-  Globe2
+  Loader2,
+  Radio
 } from 'lucide-react';
 import {
   AssistantLanguage,
   AssistantMessage,
   AssistantContext,
   resolveProjectQuestion,
-  SpeechRecognitionService,
-  speakText
+  AudioRecorderService,
+  transcribeAudioWithGemini,
+  playOrSpeakResponse,
+  stopCurrentAudioPlayback
 } from '../../lib/voice-assistant';
 
 interface AskFundTrailAssistantProps {
   context: AssistantContext;
 }
 
+type VoiceState =
+  | 'idle'
+  | 'recording'
+  | 'processing'
+  | 'speaking'
+  | 'error';
+
 export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ context }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [lang, setLang] = useState<AssistantLanguage>('en');
   const [inputQuery, setInputQuery] = useState('');
-  const [isListening, setIsListening] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [statusMessage, setStatusMessage] = useState<string>('Ready to listen');
   const [micError, setMicError] = useState<string | null>(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<AssistantMessage[]>([
     {
@@ -45,10 +59,15 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const speechServiceRef = useRef<SpeechRecognitionService | null>(null);
+  const recorderRef = useRef<AudioRecorderService | null>(null);
+  const timerIntervalRef = useRef<any>(null);
 
   useEffect(() => {
-    speechServiceRef.current = new SpeechRecognitionService();
+    recorderRef.current = new AudioRecorderService();
+    return () => {
+      stopCurrentAudioPlayback();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -76,7 +95,7 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
     }
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  const handleSendMessage = (textToSend?: string, shouldAutoSpeak = false) => {
     const query = (textToSend || inputQuery).trim();
     if (!query) return;
 
@@ -90,9 +109,10 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
     };
 
     const resolved = resolveProjectQuestion(query, lang, context);
+    const asstMsgId = `asst-${Date.now() + 1}`;
 
     const assistantMsg: AssistantMessage = {
-      id: `asst-${Date.now() + 1}`,
+      id: asstMsgId,
       sender: 'assistant',
       text: resolved.text,
       language: lang,
@@ -105,43 +125,136 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
     setInputQuery('');
 
     // Optional audio readout
-    if (isListening) {
-      speakText(resolved.text, lang);
+    if (shouldAutoSpeak) {
+      playAssistantAudio(asstMsgId, resolved.text, lang);
     }
   };
 
-  const toggleSpeechRecognition = () => {
-    if (!speechServiceRef.current?.isSupported) {
-      setMicError(
-        lang === 'hi'
-          ? 'आपके ब्राउज़र में वॉयस इनपुट समर्थित नहीं है। कृपया लिखकर सवाल पूछें।'
-          : 'Voice input is not supported in this browser. Please type your query.'
-      );
-      setTimeout(() => setMicError(null), 4000);
+  const playAssistantAudio = (msgId: string, text: string, msgLang: AssistantLanguage) => {
+    if (speakingMessageId === msgId) {
+      // Toggle stop
+      stopCurrentAudioPlayback();
+      setSpeakingMessageId(null);
+      setVoiceState('idle');
+      setStatusMessage('Ready to listen');
       return;
     }
 
-    if (isListening) {
-      speechServiceRef.current.stopListening();
-      setIsListening(false);
-    } else {
-      setMicError(null);
-      setIsListening(true);
-      speechServiceRef.current.startListening(
-        lang,
-        (transcript) => {
-          setInputQuery(transcript);
-          handleSendMessage(transcript);
-          setIsListening(false);
-        },
-        (err) => {
-          setMicError(err);
-          setIsListening(false);
-        },
-        () => {
-          setIsListening(false);
+    setSpeakingMessageId(msgId);
+    setVoiceState('speaking');
+    setStatusMessage(msgLang === 'hi' ? 'उत्तर बोल रहा हूँ...' : 'Speaking...');
+
+    playOrSpeakResponse(text, msgLang, {
+      onStart: () => {
+        setVoiceState('speaking');
+        setStatusMessage(msgLang === 'hi' ? 'उत्तर बोल रहा हूँ...' : 'Speaking...');
+      },
+      onEnd: () => {
+        setSpeakingMessageId(null);
+        setVoiceState('idle');
+        setStatusMessage('Ready to listen');
+      },
+      onError: (err) => {
+        setSpeakingMessageId(null);
+        setVoiceState('idle');
+        setStatusMessage('Voice playback completed');
+      }
+    });
+  };
+
+  const toggleRecording = async () => {
+    setMicError(null);
+
+    // If currently speaking, stop it
+    if (speakingMessageId) {
+      stopCurrentAudioPlayback();
+      setSpeakingMessageId(null);
+    }
+
+    // Stop recording if active
+    if (voiceState === 'recording') {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      setVoiceState('processing');
+      setStatusMessage(lang === 'hi' ? 'आवाज़ पहचानी जा रही है (Gemini STT)...' : 'Processing voice with Gemini...');
+
+      try {
+        const audioBlob = await recorderRef.current!.stopRecording();
+        if (audioBlob.size < 500) {
+          setVoiceState('idle');
+          setStatusMessage('Ready to listen');
+          setMicError(lang === 'hi' ? 'आवाज़ रिकॉर्ड नहीं हुई। कृपया दोबारा बोलें।' : 'Empty recording. Please try speaking again.');
+          return;
         }
+
+        const { text } = await transcribeAudioWithGemini(audioBlob, lang);
+        if (!text.trim()) {
+          setVoiceState('idle');
+          setStatusMessage('Ready to listen');
+          setMicError(lang === 'hi' ? 'कोई सवाल स्पष्ट नहीं सुनाई दिया।' : 'No clear question was recognized.');
+          return;
+        }
+
+        setStatusMessage(lang === 'hi' ? 'सवाल पहचान लिया गया' : 'Question recognized');
+        handleSendMessage(text, true);
+      } catch (err: any) {
+        setVoiceState('error');
+        const errStr = err.message || 'Transcription error';
+        if (errStr.includes('GEMINI_API_KEY') || errStr.includes('pending configuration')) {
+          setMicError(lang === 'hi' ? 'Gemini Voice सेवा सर्वर पर कॉन्फ़िगर हो रही है।' : 'Gemini Voice service pending server configuration.');
+        } else {
+          setMicError(errStr);
+        }
+        setTimeout(() => {
+          setVoiceState('idle');
+          setStatusMessage('Ready to listen');
+        }, 4000);
+      }
+      return;
+    }
+
+    // Start recording
+    if (!AudioRecorderService.isSupported()) {
+      setMicError(
+        lang === 'hi'
+          ? 'आपके ब्राउज़र में माइक्रोफ़ोन रिकॉर्डिंग समर्थित नहीं है।'
+          : 'Microphone recording is not supported in this browser.'
       );
+      return;
+    }
+
+    try {
+      setRecordingSeconds(0);
+      await recorderRef.current!.startRecording(20, async () => {
+        // Timeout callback after 20s
+        toggleRecording();
+      });
+
+      setVoiceState('recording');
+      setStatusMessage(lang === 'hi' ? 'सुन रहा हूँ... (बोलना समाप्त होने पर माइक दबाएं)' : 'Listening... (Tap mic when done)');
+
+      timerIntervalRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => {
+          if (prev >= 19) {
+            clearInterval(timerIntervalRef.current);
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err: any) {
+      setVoiceState('error');
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setMicError(
+          lang === 'hi'
+            ? 'माइक्रोफ़ोन की अनुमति अस्वीकृत की गई। कृपया ब्राउज़र सेटिंग्स में अनुमति दें।'
+            : 'Microphone permission denied. Please allow microphone access.'
+        );
+      } else {
+        setMicError(err.message || 'Could not access microphone.');
+      }
+      setTimeout(() => {
+        setVoiceState('idle');
+        setStatusMessage('Ready to listen');
+      }, 4000);
     }
   };
 
@@ -272,12 +385,25 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
                   {/* Audio Readout Button */}
                   {m.sender === 'assistant' && m.audioAvailable && (
                     <button
-                      onClick={() => speakText(m.text, m.language)}
-                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-emerald-700 transition"
-                      title="Listen to this response"
+                      onClick={() => playAssistantAudio(m.id, m.text, m.language)}
+                      className={`mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium transition rounded-md px-2 py-1 ${
+                        speakingMessageId === m.id
+                          ? 'bg-emerald-100 text-emerald-800 font-semibold animate-pulse'
+                          : 'text-slate-500 hover:text-emerald-700 hover:bg-slate-100'
+                      }`}
+                      title={speakingMessageId === m.id ? 'Stop audio' : 'Listen with Google Gemini Voice'}
                     >
-                      <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{lang === 'hi' ? 'उत्तर सुनें' : 'Listen'}</span>
+                      {speakingMessageId === m.id ? (
+                        <>
+                          <VolumeX className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>{lang === 'hi' ? 'रोकें (Stop)' : 'Stop'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{lang === 'hi' ? 'उत्तर सुनें' : 'Listen'}</span>
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
@@ -321,6 +447,26 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
 
           {/* Footer Input Bar */}
           <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+            {/* Voice Status Pill */}
+            {(voiceState !== 'idle' || (statusMessage && statusMessage !== 'Ready to listen')) && (
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-lg px-2.5 py-1 text-[11px] text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  {voiceState === 'recording' && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />}
+                  {voiceState === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-amber-600" />}
+                  {voiceState === 'speaking' && <Radio className="w-3 h-3 text-emerald-600 animate-pulse" />}
+                  <span className="font-medium">{statusMessage}</span>
+                </span>
+                {voiceState === 'recording' && (
+                  <button
+                    onClick={toggleRecording}
+                    className="text-[10px] uppercase font-bold text-rose-600 hover:underline"
+                  >
+                    Done
+                  </button>
+                )}
+              </div>
+            )}
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -338,28 +484,46 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
                       ? 'सवाल टाइप करें या माइक दबाएं...'
                       : 'Ask a question or tap microphone...'
                   }
-                  className="w-full pl-3.5 pr-10 py-2.5 bg-slate-100 hover:bg-slate-100/80 focus:bg-white text-xs sm:text-sm text-slate-800 placeholder-slate-400 rounded-xl border border-transparent focus:border-emerald-500 focus:outline-none transition"
+                  className="w-full pl-3.5 pr-12 py-2.5 bg-slate-100 hover:bg-slate-100/80 focus:bg-white text-xs sm:text-sm text-slate-800 placeholder-slate-400 rounded-xl border border-transparent focus:border-emerald-500 focus:outline-none transition"
                 />
 
-                {/* Mic Button */}
+                {/* Mic Button with MediaRecorder & Gemini Voice */}
                 <button
                   type="button"
-                  onClick={toggleSpeechRecognition}
+                  onClick={toggleRecording}
+                  disabled={voiceState === 'processing'}
                   className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition ${
-                    isListening
-                      ? 'bg-rose-500 text-white animate-pulse'
+                    voiceState === 'recording'
+                      ? 'bg-rose-500 text-white animate-pulse shadow-md'
+                      : voiceState === 'processing'
+                      ? 'bg-amber-100 text-amber-700'
                       : 'text-slate-400 hover:text-emerald-700 hover:bg-slate-200'
                   }`}
-                  title={isListening ? 'Stop listening' : 'Speak your question'}
+                  title={
+                    voiceState === 'recording'
+                      ? `Recording (${recordingSeconds}s)... Tap to stop`
+                      : voiceState === 'processing'
+                      ? 'Transcribing audio with Gemini...'
+                      : 'Speak your question'
+                  }
                 >
-                  {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                  {voiceState === 'recording' ? (
+                    <div className="flex items-center gap-1">
+                      <MicOff className="w-4 h-4 text-white" />
+                      <span className="text-[10px] font-bold font-mono text-white pr-0.5">{recordingSeconds}s</span>
+                    </div>
+                  ) : voiceState === 'processing' ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
                 </button>
               </div>
 
               {/* Send Button */}
               <button
                 type="submit"
-                disabled={!inputQuery.trim()}
+                disabled={!inputQuery.trim() || voiceState === 'processing'}
                 className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white flex items-center justify-center transition shadow-sm"
               >
                 <Send className="w-4 h-4" />
@@ -371,7 +535,7 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
                 {lang === 'hi' ? 'शून्य-भ्रम (Zero hallucination)' : 'Zero hallucination guardrail'}
               </span>
-              <span>Web Speech API (Bhashini-Ready)</span>
+              <span>Google Gemini Voice</span>
             </div>
           </div>
         </div>

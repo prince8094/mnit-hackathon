@@ -1,6 +1,112 @@
 /// <reference types="vitest" />
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { transcribeWithGemini, speakWithGemini } from './src/lib/gemini-voice-service';
+
+function geminiVoiceServerPlugin() {
+  return {
+    name: 'gemini-voice-middleware',
+    configureServer(server: any) {
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        const url = req.url?.split('?')[0];
+
+        if (url === '/api/voice/transcribe' && req.method === 'POST') {
+          try {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            const rawBody = Buffer.concat(chunks).toString('utf8');
+            let body: any = {};
+            try {
+              body = JSON.parse(rawBody);
+            } catch {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+              return;
+            }
+
+            const result = await transcribeWithGemini({
+              audioBase64: body.audioBase64,
+              mimeType: body.mimeType,
+              language: body.language,
+            });
+
+            res.statusCode = result.success ? 200 : result.isPendingConfig ? 503 : 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result));
+            return;
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: err.message }));
+            return;
+          }
+        }
+
+        if (url === '/api/voice/speak' && req.method === 'POST') {
+          try {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) {
+              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            }
+            const rawBody = Buffer.concat(chunks).toString('utf8');
+            let body: any = {};
+            try {
+              body = JSON.parse(rawBody);
+            } catch {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+              return;
+            }
+
+            const result = await speakWithGemini({
+              text: body.text,
+              language: body.language,
+              voice: body.voice,
+            });
+
+            if (!result.success) {
+              res.statusCode = result.isPendingConfig ? 503 : 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(result));
+              return;
+            }
+
+            const accept = req.headers['accept'] || '';
+            if (accept.includes('audio/') && result.audioBuffer) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', result.mimeType || 'audio/wav');
+              res.setHeader('Content-Length', String(result.audioBuffer.length));
+              res.end(result.audioBuffer);
+              return;
+            }
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(
+              JSON.stringify({
+                success: true,
+                audioBase64: result.audioBase64,
+                mimeType: result.mimeType || 'audio/wav',
+              })
+            );
+            return;
+          } catch (err: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ success: false, error: err.message }));
+            return;
+          }
+        }
+
+        next();
+      });
+    },
+  };
+}
 
 function pinataServerPlugin(pinataJwt: string) {
   return {
@@ -70,7 +176,7 @@ export default defineConfig(({ mode }) => {
   const pinataJwt = env.PINATA_JWT || process.env.PINATA_JWT || '';
 
   return {
-    plugins: [react(), pinataServerPlugin(pinataJwt)],
+    plugins: [react(), pinataServerPlugin(pinataJwt), geminiVoiceServerPlugin()],
     server: {
       port: 5173,
       host: true
