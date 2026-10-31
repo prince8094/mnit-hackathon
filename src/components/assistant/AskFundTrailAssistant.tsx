@@ -371,7 +371,7 @@ export const AskFundTrailAssistant: React.FC<AskFundTrailAssistantProps> = ({ co
                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
                 {lang === 'hi' ? 'शून्य-भ्रम (Zero hallucination)' : 'Zero hallucination guardrail'}
               </span>
-              <span>Bhashini / Web Speech v1</span>
+              <span>Web Speech API (Bhashini-Ready)</span>
             </div>
           </div>
         </div>

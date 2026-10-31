@@ -86,7 +86,29 @@ export function resolveProjectQuestion(
     };
   }
 
-  // 2. Total Received / Donations Query
+  // 2. Remaining Balance Query (Checked before general received/spent so "kitna bacha hai" resolves to balance)
+  if (
+    q.includes('remaining') ||
+    q.includes('balance') ||
+    q.includes('left') ||
+    q.includes('bacha') ||
+    q.includes('shesh') ||
+    q.includes('शेष') ||
+    q.includes('बचा')
+  ) {
+    if (lang === 'hi') {
+      return {
+        text: `वर्तमान में प्रोजेक्ट खाते में कुल शेष (Remaining Balance) ₹${remaining.toLocaleString('en-IN')} है (प्राप्त ₹${totalReceived.toLocaleString('en-IN')} - खर्च ₹${totalSpent.toLocaleString('en-IN')})।`,
+        referenceLink: { label: 'वित्तीय अवलोकन देखें', targetId: 'financial-overview' }
+      };
+    }
+    return {
+      text: `The remaining unspent balance is ₹${remaining.toLocaleString('en-IN')} (Calculated as ₹${totalReceived.toLocaleString('en-IN')} received minus ₹${totalSpent.toLocaleString('en-IN')} spent).`,
+      referenceLink: { label: 'View Financial Summary', targetId: 'financial-overview' }
+    };
+  }
+
+  // 3. Total Received / Donations Query
   if (
     q.includes('receive') ||
     q.includes('received') ||
@@ -111,7 +133,7 @@ export function resolveProjectQuestion(
     };
   }
 
-  // 2. Total Spent / Expenses Query
+  // 4. Total Spent / Expenses Query
   if (
     q.includes('spent') ||
     q.includes('spend') ||
@@ -130,28 +152,6 @@ export function resolveProjectQuestion(
     return {
       text: `Total recorded expenditure is ₹${totalSpent.toLocaleString('en-IN')} across ${ctx.expenses.length} expense items. The largest expense category is ${ctx.expenses[0]?.category || 'Project Materials'}.`,
       referenceLink: { label: 'View Expense Breakdown', targetId: 'expense-breakdown' }
-    };
-  }
-
-  // 3. Remaining Balance Query
-  if (
-    q.includes('remaining') ||
-    q.includes('balance') ||
-    q.includes('left') ||
-    q.includes('bacha') ||
-    q.includes('shesh') ||
-    q.includes('शेष') ||
-    q.includes('बचा हुआ')
-  ) {
-    if (lang === 'hi') {
-      return {
-        text: `वर्तमान में प्रोजेक्ट खाते में कुल शेष (Remaining Balance) ₹${remaining.toLocaleString('en-IN')} है (प्राप्त ₹${totalReceived.toLocaleString('en-IN')} - खर्च ₹${totalSpent.toLocaleString('en-IN')})।`,
-        referenceLink: { label: 'वित्तीय अवलोकन देखें', targetId: 'financial-overview' }
-      };
-    }
-    return {
-      text: `The remaining unspent balance is ₹${remaining.toLocaleString('en-IN')} (Calculated as ₹${totalReceived.toLocaleString('en-IN')} received minus ₹${totalSpent.toLocaleString('en-IN')} spent).`,
-      referenceLink: { label: 'View Financial Summary', targetId: 'financial-overview' }
     };
   }
 

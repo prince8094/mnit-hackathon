@@ -158,17 +158,11 @@ fundtrail/
 
 ---
 
-## 📜 Honest Claims & Disclaimers
+## 📜 Honest Claims & Presentation Disclaimers
 
-As specified in FundTrail's design principles:
-1. Anchoring a report snapshot fingerprint on Polygon Amoy proves integrity relative to publication date; it allows donors to detect if published records were tampered with.
-2. It **does not** prove that an uploaded invoice is authentic in the physical world.
-3. All activity milestones are honestly labeled as `Self-Reported by NGO` unless verified by a real human auditor.
-
----
-
-## 🛠 Developer Notes & Local Verification
-
-- **Environment:** Node.js v18+, MetaMask configured for Polygon Amoy testnet.
-- **Integrity Testing:** Run `npm test tests/report-hash.test.ts` to validate deterministic canonical JSON serialization and Web Crypto SHA-256 calculation against test fixtures.
-- **Contract Interfacing:** Ensure local `.env` specifies valid Amoy RPC endpoint and deployed anchor addresses before initiating on-chain transactions.
+As specified in FundTrail's design principles and presentation guidelines:
+1. **Report Anchoring Integrity:** Anchoring a report snapshot fingerprint on Polygon Amoy proves cryptographic integrity relative to publication date; it allows donors to detect if published records were tampered with.
+2. **Real-World Invoices:** Anchoring does **not** physically prove an uploaded invoice was authentic in the physical world without audit verification.
+3. **Tenant-Scoped Duplicate Detection:** Evidence Intelligence duplicate detection is strictly **tenant-scoped** within the authorized organization (safeguarding internal accounting from duplicate receipt claims while preventing cross-tenant privacy leakage); it is **not** a cross-organization collusion detector.
+4. **Voice Assistant Integration:** The current "Ask FundTrail" voice implementation runs on client-side **browser Web Speech APIs** (`SpeechRecognition` & `SpeechSynthesis`) paired with a deterministic, **Bhashini-compatible interface**. We do **not** claim a live backend Bhashini cloud API integration unless configured with official Ministry of Electronics & IT (MeitY) API credentials.
+5. **Activity Milestones:** All activity milestones are honestly labeled as `Self-Reported by NGO` unless independently signed off by a third-party verifier.
