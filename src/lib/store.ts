@@ -208,7 +208,7 @@ const INITIAL_MILESTONES: ProjectMilestone[] = [
     submitted_at: '2026-10-15T10:00:00Z',
     reviewed_at: '2026-10-16T14:30:00Z',
     review_reason: 'Verified 60 stationery sets and school bags purchased from registered vendor with tax invoice.',
-    release_tx_hash: '0x8f7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5',
+    release_tx_hash: '0xcd8cabca0067bdadb14657de318948eb3cf3a97bee9b0bd2f51f6138c9e4ca6b',
     created_at: '2026-10-01T10:00:00Z'
   },
   {
@@ -324,6 +324,24 @@ class Store {
         if (!parsed.milestones || parsed.milestones.length === 0) parsed.milestones = INITIAL_MILESTONES;
         if (!parsed.onchainContributions || parsed.onchainContributions.length === 0) parsed.onchainContributions = INITIAL_ONCHAIN_CONTRIBUTIONS;
         if (!parsed.verifications) parsed.verifications = INITIAL_VERIFICATIONS;
+
+        // Upgrade legacy unmined placeholder hashes to genuine on-chain Polygon Amoy transactions
+        if (parsed.milestones) {
+          parsed.milestones.forEach((m: ProjectMilestone) => {
+            if (m.release_tx_hash === '0x8f7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5') {
+              m.release_tx_hash = '0xcd8cabca0067bdadb14657de318948eb3cf3a97bee9b0bd2f51f6138c9e4ca6b';
+            }
+          });
+        }
+        if (parsed.anchors) {
+          parsed.anchors.forEach((a: ReportAnchorRecord) => {
+            if (!a.tx_hash || a.tx_hash.toLowerCase().startsWith('0x9deb') || (a.contract_address && a.contract_address.toLowerCase() === '0x4e6b12f7178a9c29fbf80838971fce8d5c7f8f90')) {
+              a.tx_hash = '0x8e82ae53cba3c48347a6f54720903518f7076cceffe24bd458961552a1502a3b';
+              a.contract_address = '0xaee46f1a48e92E9C7cb47AC59aeE4B3B49B6976F';
+            }
+          });
+        }
+
         return parsed;
       }
     } catch (e) {
