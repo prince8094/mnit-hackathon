@@ -61,7 +61,7 @@ Donors require **no login** and **no crypto wallet**:
 - **Backend / Database:** Supabase PostgreSQL with Row Level Security (RLS) policies (`supabase/migrations/001_initial_schema.sql`)
 - **CSV Engine:** Papa Parse with row-by-row validation and duplicate reference detection
 - **Cryptography:** Web Crypto API (`SHA-256`) with deterministic JSON key canonicalization
-- **Testing:** Vitest automated test suite (`tests/calculations.test.ts`, `tests/report-hash.test.ts`)
+- **Testing:** Vitest suite covering calculations, report hashing, and milestone escrow (`tests/`)
 
 ---
 
@@ -72,14 +72,21 @@ fundtrail/
 ├── README.md                      # Quick start & architecture summary
 ├── README_FundTrail.md            # Comprehensive project specification
 ├── BUILD_LOG.md                   # Step-by-step implementation log
-├── .env.example                   # Environment variable template
 ├── package.json
 ├── index.html
+├── api/
+│   └── ipfs/upload.ts              # IPFS upload endpoint
 ├── contracts/
-│   └── ReportAnchor.sol           # Polygon Amoy report anchor smart contract
+│   ├── FundTrailMilestoneEscrow.sol # Milestone escrow contract
+│   └── ReportAnchor.sol            # Polygon Amoy report anchor smart contract
+├── scripts/
+│   ├── compile.cjs                 # Contract compilation
+│   └── deploy-escrow.cjs           # Escrow deployment
 ├── supabase/
 │   ├── migrations/
-│   │   └── 001_initial_schema.sql # 8 tables, RLS policies, storage bucket configs
+│   │   ├── 001_initial_schema.sql
+│   │   ├── 002_rls_demo_and_auth_trigger.sql
+│   │   └── 003_milestone_escrow_schema.sql
 │   └── seed.sql                   # Synthetic demo dataset seed script
 ├── src/
 │   ├── app/
@@ -103,11 +110,13 @@ fundtrail/
 │   │   ├── LoginPage.tsx          # Fast demo sign-in & auth
 │   │   ├── NewProjectPage.tsx     # Project creation form
 │   │   ├── ProjectDetailPage.tsx  # Donations, Expenses, Evidence, Updates, Anchor
-│   │   └── PublicReportPage.tsx   # Public donor report & live integrity check
+│   │   ├── PublicReportPage.tsx   # Public donor report & live integrity check
+│   │   └── VerifierDashboardPage.tsx # Milestone review dashboard
 │   └── types/                     # TypeScript domain models
 └── tests/
     ├── calculations.test.ts       # Vitest financial summary tests
     ├── report-hash.test.ts        # Vitest hashing, canonicalization & CSV tests
+    ├── milestone-escrow.test.ts   # Escrow contract tests
     └── rls-checklist.md           # Security audit & multi-tenant isolation checklist
 ```
 
