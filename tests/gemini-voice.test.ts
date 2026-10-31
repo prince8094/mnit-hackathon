@@ -283,3 +283,4 @@ describe('Google Gemini Voice Assistant Integration', () => {
     expect(resOutOfScope.text).toContain('Sorry, this information is not explicitly documented');
   });
 });
+
