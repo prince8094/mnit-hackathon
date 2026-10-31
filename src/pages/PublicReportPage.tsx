@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { store } from '../lib/store';
-import { ReportSnapshot, VerificationState, ProjectMilestone, OnchainContribution } from '../types';
+import { ReportSnapshot, VerificationState, ProjectMilestone, OnchainContribution, Project, DistributionBatch, Expense, Donation } from '../types';
+import { calculateDeliveryAggregates } from '../lib/proof-of-delivery';
+import { AskFundTrailAssistant } from '../components/assistant/AskFundTrailAssistant';
 import { formatINR, formatDate, formatDateTime, truncateHash } from '../lib/formatters';
 import { computeReportHash } from '../lib/report-snapshot';
 import { computeProjectKey } from '../lib/hashing';
-import { 
-  readAnchoredHashFromChain, 
-  DEFAULT_AMOY_EXPLORER, 
+import {
+  readAnchoredHashFromChain,
+  DEFAULT_AMOY_EXPLORER,
   DEFAULT_ANCHOR_CONTRACT_ADDRESS,
   DEFAULT_ESCROW_CONTRACT_ADDRESS,
   AMOY_CHAIN_ID,
@@ -17,19 +19,20 @@ import {
   connectWallet,
   switchToPolygonAmoy,
   contributeOnchain,
-  computeProjectIdKey
+  computeProjectIdKey,
+  classifyTransaction
 } from '../lib/blockchain';
 import { getIPFSGatewayUrl } from '../lib/ipfs';
 import { IntegrityBadge } from '../components/status/IntegrityBadge';
 import { StatusBadge } from '../components/status/StatusBadge';
-import { 
-  ShieldCheck, 
-  CheckCircle2, 
-  AlertTriangle, 
-  RotateCcw, 
-  ExternalLink, 
-  Layers, 
-  FileText, 
+import {
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle,
+  RotateCcw,
+  ExternalLink,
+  Layers,
+  FileText,
   Calendar,
   Wallet,
   ArrowDownLeft,
@@ -40,7 +43,9 @@ import {
   Info,
   Lock,
   Plus,
-  XCircle
+  XCircle,
+  PackageCheck,
+  Sparkles
 } from 'lucide-react';
 
 export const PublicReportPage: React.FC = () => {
@@ -52,6 +57,10 @@ export const PublicReportPage: React.FC = () => {
   // Milestone Escrow & On-Chain Transparency Data
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
   const [onchainContributions, setOnchainContributions] = useState<OnchainContribution[]>([]);
+  const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [batches, setBatches] = useState<DistributionBatch[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [donations, setDonations] = useState<Donation[]>([]);
 
   // Verification state
   const [verifying, setVerifying] = useState(false);
@@ -95,8 +104,12 @@ export const PublicReportPage: React.FC = () => {
 
       setSnapshot(s || null);
       if (s) {
+        setActiveProject(store.getProjectById(s.project_id) || null);
         setMilestones(store.getMilestones(s.project_id));
         setOnchainContributions(store.getOnchainContributions(s.project_id));
+        setBatches(store.getDistributionBatches(s.project_id));
+        setExpenses(store.getExpenses(s.project_id));
+        setDonations(store.getDonations(s.project_id));
         runVerification(s);
       }
       setLoading(false);
@@ -108,8 +121,12 @@ export const PublicReportPage: React.FC = () => {
       if (slug) {
         const s = store.getSnapshotBySlug(slug);
         if (s) {
+          setActiveProject(store.getProjectById(s.project_id) || null);
           setMilestones(store.getMilestones(s.project_id));
           setOnchainContributions(store.getOnchainContributions(s.project_id));
+          setBatches(store.getDistributionBatches(s.project_id));
+          setExpenses(store.getExpenses(s.project_id));
+          setDonations(store.getDonations(s.project_id));
         }
       }
     });
@@ -344,7 +361,7 @@ export const PublicReportPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* SECTION A: POLYGON AMOY MILESTONE ESCROW TRAIL (The Core Innovation) */}
       {/* ========================================================================= */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl border border-indigo-800 shadow-md p-6 sm:p-8 space-y-6">
+      <div id="milestones-section" className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl border border-indigo-800 shadow-md p-6 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-indigo-800/60">
           <div>
             <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 mb-2">
@@ -430,15 +447,14 @@ export const PublicReportPage: React.FC = () => {
                 >
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                     <div className="flex items-center gap-2.5">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
-                        isReleased 
-                          ? 'bg-emerald-500 text-slate-900' 
-                          : isApproved 
-                          ? 'bg-blue-500 text-white' 
-                          : isSubmitted 
-                          ? 'bg-amber-400 text-slate-900 animate-pulse' 
-                          : 'bg-slate-700 text-slate-300'
-                      }`}>
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${isReleased
+                          ? 'bg-emerald-500 text-slate-900'
+                          : isApproved
+                            ? 'bg-blue-500 text-white'
+                            : isSubmitted
+                              ? 'bg-amber-400 text-slate-900 animate-pulse'
+                              : 'bg-slate-700 text-slate-300'
+                        }`}>
                         #{index + 1}
                       </div>
                       <div>
@@ -510,20 +526,37 @@ export const PublicReportPage: React.FC = () => {
                         </div>
                       )}
 
-                      {m.release_tx_hash && (
-                        <div className="pt-1 flex items-center justify-between font-mono text-[10px]">
-                          <span className="text-slate-400 font-sans">PolygonScan Release Transaction:</span>
-                          <a
-                            href={getAmoyExplorerTxUrl(m.release_tx_hash)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-emerald-400 hover:text-emerald-300 underline font-semibold inline-flex items-center gap-1"
-                          >
-                            {m.release_tx_hash.slice(0, 12)}...{m.release_tx_hash.slice(-6)}
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        </div>
-                      )}
+                      {(() => {
+                        const txInfo = classifyTransaction(m.release_tx_hash, m.tx_status);
+                        if (txInfo.isVerifiedOnchain && txInfo.explorerUrl) {
+                          return (
+                            <div className="pt-1 flex items-center justify-between font-mono text-[10px]">
+                              <span className="text-slate-400 font-sans">PolygonScan Release Transaction:</span>
+                              <a
+                                href={txInfo.explorerUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-400 hover:text-emerald-300 underline font-semibold inline-flex items-center gap-1"
+                              >
+                                {m.release_tx_hash?.slice(0, 12)}...{m.release_tx_hash?.slice(-6)}
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            </div>
+                          );
+                        }
+                        if (m.status === 'RELEASED') {
+                          return (
+                            <div className="pt-1 flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400 font-sans">Release Verification:</span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                Demo Simulated (Off-Chain)
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   )}
                 </div>
@@ -548,34 +581,41 @@ export const PublicReportPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 font-mono">
-                {onchainContributions.map((c) => (
-                  <tr key={c.id} className="hover:bg-white/5">
-                    <td className="py-2 px-3 text-slate-300">
-                      {c.donor_wallet.slice(0, 8)}...{c.donor_wallet.slice(-6)}
-                    </td>
-                    <td className="py-2 px-3 font-bold text-indigo-300">
-                      {c.amount_pol} POL
-                    </td>
-                    <td className="py-2 px-3 font-sans text-slate-400">
-                      {new Date(c.contributed_at).toLocaleDateString()}
-                    </td>
-                    <td className="py-2 px-3">
-                      {c.tx_hash ? (
-                        <a
-                          href={getAmoyExplorerTxUrl(c.tx_hash)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-emerald-400 underline inline-flex items-center gap-0.5"
-                        >
-                          <span>{c.tx_hash.slice(0, 8)}...</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      ) : (
-                        <span className="text-slate-500 font-sans">Off-chain</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {onchainContributions.map((c) => {
+                  const txInfo = classifyTransaction(c.tx_hash, c.tx_status);
+                  return (
+                    <tr key={c.id} className="hover:bg-white/5">
+                      <td className="py-2 px-3 text-slate-300">
+                        {c.donor_wallet.slice(0, 8)}...{c.donor_wallet.slice(-6)}
+                      </td>
+                      <td className="py-2 px-3 font-bold text-indigo-300">
+                        {c.amount_pol} POL
+                      </td>
+                      <td className="py-2 px-3 font-sans text-slate-400">
+                        {new Date(c.contributed_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-2 px-3">
+                        {txInfo.isVerifiedOnchain && txInfo.explorerUrl ? (
+                          <a
+                            href={txInfo.explorerUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-400 underline inline-flex items-center gap-0.5"
+                          >
+                            <span>{c.tx_hash?.slice(0, 8)}...</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        ) : txInfo.isDemo ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 font-sans">
+                            Demo Simulated
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 font-sans">Pending / Off-chain</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -585,7 +625,7 @@ export const PublicReportPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* SECTION B: CRYPTOGRAPHIC INTEGRITY VERIFICATION CARD (Report Fingerprint) */}
       {/* ========================================================================= */}
-      <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+      <div id="blockchain-verification" className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -695,7 +735,7 @@ export const PublicReportPage: React.FC = () => {
       </div>
 
       {/* Off-Chain Financial Summary (INR Books) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-6">
+      <div id="financial-overview" className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-6">
         <h3 className="text-base font-bold text-slate-900">Off-Chain Operational Financial Summary (INR)</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -728,7 +768,7 @@ export const PublicReportPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                  <div 
+                  <div
                     className="bg-emerald-500 h-2 rounded-full"
                     style={{ width: `${Math.max(pct, 2)}%` }}
                   />
@@ -763,6 +803,129 @@ export const PublicReportPage: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION D: PROOF OF DELIVERY (QR Beneficiary Acknowledgements) */}
+      {/* ========================================================================= */}
+      <div id="proof-of-delivery" className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center font-bold">
+              <PackageCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Proof of Delivery (Beneficiary Acknowledgements)</h3>
+              <p className="text-xs text-slate-500">
+                Single-use digital QR receipts confirmed by direct recipients in the field
+              </p>
+            </div>
+          </div>
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-teal-50 text-teal-800 rounded-full text-xs font-semibold border border-teal-200/80">
+            <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+            100% Privacy-Preserved (Zero PII)
+          </span>
+        </div>
+
+        {/* Aggregate Stats */}
+        {(() => {
+          const stats = calculateDeliveryAggregates(batches);
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100">
+                <span className="text-xs text-slate-500 block">Target Deliveries</span>
+                <span className="text-xl font-bold text-slate-900 mt-0.5 block">{stats.totalExpected}</span>
+                <span className="text-[10px] text-slate-400">Total planned items</span>
+              </div>
+              <div className="bg-emerald-50/70 rounded-xl p-3.5 border border-emerald-100">
+                <span className="text-xs text-emerald-800 font-medium block">Confirmed Received</span>
+                <span className="text-xl font-bold text-emerald-950 mt-0.5 block">{stats.totalAcknowledged}</span>
+                <span className="text-[10px] text-emerald-700">Digital QR acknowledgements</span>
+              </div>
+              <div className="bg-amber-50/70 rounded-xl p-3.5 border border-amber-100">
+                <span className="text-xs text-amber-800 font-medium block">Pending Acknowledgements</span>
+                <span className="text-xl font-bold text-amber-950 mt-0.5 block">{stats.totalPending}</span>
+                <span className="text-[10px] text-amber-700">In field distribution</span>
+              </div>
+              <div className="bg-teal-50/70 rounded-xl p-3.5 border border-teal-100">
+                <span className="text-xs text-teal-800 font-medium block">Acknowledgement Rate</span>
+                <span className="text-xl font-bold text-teal-950 mt-0.5 block">{stats.acknowledgementRatePercent}%</span>
+                <div className="w-full bg-teal-200/60 rounded-full h-1.5 mt-1 overflow-hidden">
+                  <div
+                    className="bg-teal-600 h-1.5 rounded-full"
+                    style={{ width: `${Math.min(100, stats.acknowledgementRatePercent)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Batches Table */}
+        {batches.length === 0 ? (
+          <p className="text-xs text-slate-400">No distribution batches published yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {batches.map((batch) => {
+              const pct = batch.expected_quantity > 0 ? Math.round((batch.acknowledged_count / batch.expected_quantity) * 100) : 0;
+              return (
+                <div key={batch.id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold bg-slate-200 px-1.5 py-0.5 rounded text-slate-700">
+                          {batch.batch_number}
+                        </span>
+                        <span className="text-sm font-bold text-slate-900">{batch.batch_name}</span>
+                      </div>
+                      <div className="text-xs text-slate-600 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                        <span><strong>Item:</strong> {batch.item_description}</span>
+                        <span><strong>Location:</strong> {batch.location_or_institution}</span>
+                        <span><strong>Date:</strong> {batch.distribution_date}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-bold text-slate-800 block">
+                        {batch.acknowledged_count} / {batch.expected_quantity} Acknowledged ({pct}%)
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Updated {formatDate(batch.updated_at || batch.created_at)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+
+                  {batch.distribution_evidence_cid && (
+                    <div className="pt-1 flex items-center gap-2 text-xs text-slate-500">
+                      <span>Distribution Evidence:</span>
+                      <a
+                        href={getIPFSGatewayUrl(batch.distribution_evidence_cid)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-700 font-semibold hover:underline inline-flex items-center gap-1"
+                      >
+                        Inspect on IPFS ({batch.distribution_evidence_cid.slice(0, 10)}...)
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 text-[11px] text-slate-500 leading-relaxed">
+          <strong>Privacy Charter Notice:</strong> Under the FundTrail Privacy Charter, individual beneficiary identities, children's personal records, photographs of minors, and government identity numbers are never published or stored. Reported figures represent one-time cryptographic acknowledgement links validated by field recipients.
+        </div>
       </div>
 
       {/* Modal: Live Testnet Contribution */}
@@ -843,6 +1006,21 @@ export const PublicReportPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Floating Ask FundTrail Multilingual Voice Assistant */}
+      {activeProject && (
+        <AskFundTrailAssistant
+          context={{
+            project: activeProject,
+            donations,
+            expenses,
+            milestones,
+            batches,
+            snapshot,
+            anchorTxHash: anchorTxHash || null
+          }}
+        />
       )}
     </div>
   );

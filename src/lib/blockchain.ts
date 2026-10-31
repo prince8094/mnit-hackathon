@@ -9,6 +9,7 @@ import {
 } from 'ethers';
 import { REPORT_ANCHOR_ABI } from '../features/blockchain/contract-abi';
 import { FUNDTRAIL_MILESTONE_ESCROW_ABI } from '../features/blockchain/milestone-escrow-abi';
+import { TransactionClassification } from '../types';
 
 export const AMOY_CHAIN_ID = 80002;
 export const AMOY_CHAIN_ID_HEX = '0x13882';
@@ -53,8 +54,87 @@ export interface WalletState {
   error: string | null;
 }
 
+/**
+ * Known synthetic or unrelated micropayment hashes that must NEVER be
+ * misrepresented as verified escrow operations (releases, contributions, verifications).
+ */
+export const KNOWN_UNRELATED_OR_DEMO_HASHES = new Set([
+  '0x8f7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5'.toLowerCase(),
+  '0x99a3b2c1d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1'.toLowerCase(),
+  '0x88f2a1b9c7d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6'.toLowerCase(),
+  '0x7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5a4'.toLowerCase(),
+  '0xcd8cabca0067bdadb14657de318948eb3cf3a97bee9b0bd2f51f6138c9e4ca6b'.toLowerCase(),
+  '0x620c75a552e693404b527aa5db824202d2d5b2916a750cd1617dba105b73684f'.toLowerCase(),
+  '0x7425df0f820cf075dd83044f53afee837f4df44ed943430d3a5fc662360be11e'.toLowerCase(),
+  '0xb217b4299fdd598c7c880e5db2a0682dbfe653f4938e694fd31ad8830a9f0809'.toLowerCase(),
+]);
+
+/**
+ * Checks if a hash is synthetic, placeholder or known unrelated transaction.
+ */
+export function isSyntheticOrDemoHash(hash: string | null | undefined): boolean {
+  if (!hash) return true;
+  const clean = hash.toLowerCase().trim();
+  if (!clean.startsWith('0x') || clean.length !== 66) return true;
+  return KNOWN_UNRELATED_OR_DEMO_HASHES.has(clean);
+}
+
+/**
+ * Classifies a transaction to strictly separate real on-chain escrow operations,
+ * demo/simulated records, and pending state.
+ */
+export function classifyTransaction(
+  txHash: string | null | undefined,
+  explicitStatus?: TransactionClassification
+): {
+  status: TransactionClassification;
+  isVerifiedOnchain: boolean;
+  isDemo: boolean;
+  label: string;
+  explorerUrl: string | null;
+} {
+  if (explicitStatus === 'DEMO_SIMULATED' || isSyntheticOrDemoHash(txHash)) {
+    return {
+      status: 'DEMO_SIMULATED',
+      isVerifiedOnchain: false,
+      isDemo: true,
+      label: 'Demo Simulated (Off-chain)',
+      explorerUrl: null
+    };
+  }
+
+  if (explicitStatus === 'PENDING' || !txHash) {
+    return {
+      status: 'PENDING',
+      isVerifiedOnchain: false,
+      isDemo: false,
+      label: 'Pending Confirmation',
+      explorerUrl: null
+    };
+  }
+
+  if (txHash && txHash.startsWith('0x') && txHash.length === 66 && !isSyntheticOrDemoHash(txHash)) {
+    return {
+      status: 'VERIFIED_ONCHAIN',
+      isVerifiedOnchain: true,
+      isDemo: false,
+      label: 'Verified on Polygon Amoy',
+      explorerUrl: `${DEFAULT_AMOY_EXPLORER}/tx/${txHash}`
+    };
+  }
+
+  return {
+    status: 'INVALID',
+    isVerifiedOnchain: false,
+    isDemo: false,
+    label: 'Invalid Transaction',
+    explorerUrl: null
+  };
+}
+
 export function getAmoyExplorerTxUrl(txHash: string | null | undefined): string {
   if (!txHash || !txHash.startsWith('0x') || txHash.length < 66) return '#';
+  if (isSyntheticOrDemoHash(txHash)) return '#';
   return `${DEFAULT_AMOY_EXPLORER}/tx/${txHash}`;
 }
 

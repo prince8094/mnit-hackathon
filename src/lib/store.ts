@@ -10,10 +10,18 @@ import {
   ProjectMilestone,
   OnchainContribution,
   MilestoneVerification,
+  DistributionBatch,
+  DeliveryToken,
+  EvidenceIntelligenceFlag,
+  EvidenceFlagStatus,
+  ExtractedMetadata,
   Role
 } from '../types';
 import { generateSanitisedSnapshot, computeReportHash } from './report-snapshot';
 import { supabase, isSupabaseConfigured, signOutFromSupabase } from './supabase';
+import { evaluateEvidenceIntelligence, EvidenceIntelligenceSummary } from './evidence-intelligence';
+import { hashToken } from './proof-of-delivery';
+import { isSyntheticOrDemoHash } from './blockchain';
 
 export interface UserSession {
   id: string;
@@ -208,7 +216,8 @@ const INITIAL_MILESTONES: ProjectMilestone[] = [
     submitted_at: '2026-10-15T10:00:00Z',
     reviewed_at: '2026-10-16T14:30:00Z',
     review_reason: 'Verified 60 stationery sets and school bags purchased from registered vendor with tax invoice.',
-    release_tx_hash: '0xcd8cabca0067bdadb14657de318948eb3cf3a97bee9b0bd2f51f6138c9e4ca6b',
+    release_tx_hash: null,
+    tx_status: 'DEMO_SIMULATED',
     created_at: '2026-10-01T10:00:00Z'
   },
   {
@@ -226,6 +235,7 @@ const INITIAL_MILESTONES: ProjectMilestone[] = [
     reviewed_at: null,
     review_reason: null,
     release_tx_hash: null,
+    tx_status: 'PENDING',
     created_at: '2026-10-01T10:00:00Z'
   },
   {
@@ -243,6 +253,7 @@ const INITIAL_MILESTONES: ProjectMilestone[] = [
     reviewed_at: null,
     review_reason: null,
     release_tx_hash: null,
+    tx_status: 'PENDING',
     created_at: '2026-10-01T10:00:00Z'
   }
 ];
@@ -254,7 +265,8 @@ const INITIAL_ONCHAIN_CONTRIBUTIONS: OnchainContribution[] = [
     project_id: INITIAL_PROJECT_A.id,
     donor_wallet: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
     amount_pol: 40,
-    tx_hash: '0x620c75a552e693404b527aa5db824202d2d5b2916a750cd1617dba105b73684f',
+    tx_hash: null,
+    tx_status: 'DEMO_SIMULATED',
     contributed_at: '2026-10-02T11:00:00Z'
   },
   {
@@ -263,7 +275,8 @@ const INITIAL_ONCHAIN_CONTRIBUTIONS: OnchainContribution[] = [
     project_id: INITIAL_PROJECT_A.id,
     donor_wallet: '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65',
     amount_pol: 60,
-    tx_hash: '0x7425df0f820cf075dd83044f53afee837f4df44ed943430d3a5fc662360be11e',
+    tx_hash: null,
+    tx_status: 'DEMO_SIMULATED',
     contributed_at: '2026-10-04T15:30:00Z'
   }
 ];
@@ -276,7 +289,8 @@ const INITIAL_VERIFICATIONS: MilestoneVerification[] = [
     verifier_wallet: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
     approved: true,
     review_reason: 'Verified 60 stationery sets and school bags purchased from registered vendor with tax invoice.',
-    tx_hash: '0xb217b4299fdd598c7c880e5db2a0682dbfe653f4938e694fd31ad8830a9f0809',
+    tx_hash: null,
+    tx_status: 'DEMO_SIMULATED',
     reviewed_at: '2026-10-16T14:30:00Z'
   }
 ];
@@ -287,10 +301,56 @@ const INITIAL_ANCHORS: ReportAnchorRecord[] = [
     report_snapshot_id: 's1111111-0000-0000-0000-000000000001',
     chain_id: 80002,
     contract_address: '0xaee46f1a48e92E9C7cb47AC59aeE4B3B49B6976F',
-    tx_hash: '0xd7c561ff41a211e9c32c7b464eaa319adfb3a0e9e4f60d5719ee0a53e6cec833',
+    tx_hash: '0x8e82ae53cba3c48347a6f54720903518f7076cceffe24bd458961552a1502a3b',
     publisher_wallet: '0x38681cC8b95830843080AFf65A6D0a45E1E9f4fF',
     anchor_status: 'MINED',
     created_at: '2026-10-31T05:36:00Z'
+  }
+];
+
+const INITIAL_BATCHES: DistributionBatch[] = [
+  {
+    id: 'b1111111-0000-0000-0000-000000000001',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    batch_number: 'BATCH-01',
+    batch_name: 'School Distribution — Sanganer Village Primary Schools',
+    distribution_date: '2026-10-25',
+    location_or_institution: 'Government Primary School, Sanganer, Jaipur',
+    item_description: 'Standard Educational Kit (Bag, 6 Notebooks, Stationery & Geometry Set)',
+    expected_quantity: 60,
+    acknowledged_count: 52,
+    public_description: 'Primary distribution for rural students enrolled in grades 3 through 8. Evidence verified on IPFS.',
+    distribution_evidence_cid: 'QmZ4tDuvesekSs4qM5ZBKpXiZGun7S2CYtEZRB3DYXkjGx',
+    status: 'IN_PROGRESS',
+    created_at: '2026-10-20T10:00:00Z',
+    updated_at: '2026-10-26T12:00:00Z'
+  }
+];
+
+const INITIAL_TOKENS: DeliveryToken[] = [
+  {
+    id: 'tok-demo-001',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    batch_id: 'b1111111-0000-0000-0000-000000000001',
+    token_hash: '0x7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5a4',
+    recipient_index: 53,
+    status: 'ISSUED',
+    expires_at: '2026-12-31T23:59:59Z',
+    created_at: '2026-10-20T10:00:00Z'
+  },
+  {
+    id: 'tok-demo-002',
+    organization_id: INITIAL_ORG_A.id,
+    project_id: INITIAL_PROJECT_A.id,
+    batch_id: 'b1111111-0000-0000-0000-000000000001',
+    token_hash: '0x8f7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5',
+    recipient_index: 52,
+    status: 'REDEEMED',
+    expires_at: '2026-12-31T23:59:59Z',
+    redeemed_at: '2026-10-26T11:45:00Z',
+    created_at: '2026-10-20T10:00:00Z'
   }
 ];
 
@@ -315,6 +375,9 @@ interface AppState {
   milestones: ProjectMilestone[];
   onchainContributions: OnchainContribution[];
   verifications: MilestoneVerification[];
+  batches: DistributionBatch[];
+  tokens: DeliveryToken[];
+  flags: EvidenceIntelligenceFlag[];
   currentUser: UserSession | null;
   users: RegisteredUser[];
 }
@@ -329,55 +392,7 @@ class Store {
     this.initSupabaseSync();
   }
 
-  private loadState(): AppState {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (!parsed.milestones || parsed.milestones.length === 0) parsed.milestones = INITIAL_MILESTONES;
-        if (!parsed.onchainContributions || parsed.onchainContributions.length === 0) parsed.onchainContributions = INITIAL_ONCHAIN_CONTRIBUTIONS;
-        if (!parsed.verifications) parsed.verifications = INITIAL_VERIFICATIONS;
-
-        // Upgrade legacy unmined placeholder hashes to genuine on-chain Polygon Amoy transactions
-        if (parsed.milestones) {
-          parsed.milestones.forEach((m: ProjectMilestone) => {
-            if (m.release_tx_hash === '0x8f7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5') {
-              m.release_tx_hash = '0xcd8cabca0067bdadb14657de318948eb3cf3a97bee9b0bd2f51f6138c9e4ca6b';
-            }
-          });
-        }
-        if (parsed.anchors) {
-          parsed.anchors.forEach((a: ReportAnchorRecord) => {
-            if (!a.tx_hash || a.tx_hash.toLowerCase().startsWith('0x9deb') || (a.contract_address && a.contract_address.toLowerCase() === '0x4e6b12f7178a9c29fbf80838971fce8d5c7f8f90')) {
-              a.tx_hash = '0x8e82ae53cba3c48347a6f54720903518f7076cceffe24bd458961552a1502a3b';
-              a.contract_address = '0xaee46f1a48e92E9C7cb47AC59aeE4B3B49B6976F';
-            }
-          });
-        }
-        if (parsed.onchainContributions) {
-          parsed.onchainContributions.forEach((c: OnchainContribution) => {
-            if (c.tx_hash === '0x88f2a1b9c7d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6') {
-              c.tx_hash = '0x620c75a552e693404b527aa5db824202d2d5b2916a750cd1617dba105b73684f';
-            }
-            if (c.tx_hash === '0x99a3b2c1d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1') {
-              c.tx_hash = '0x7425df0f820cf075dd83044f53afee837f4df44ed943430d3a5fc662360be11e';
-            }
-          });
-        }
-        if (parsed.verifications) {
-          parsed.verifications.forEach((v: MilestoneVerification) => {
-            if (v.tx_hash === '0x7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5a4') {
-              v.tx_hash = '0xb217b4299fdd598c7c880e5db2a0682dbfe653f4938e694fd31ad8830a9f0809';
-            }
-          });
-        }
-
-        return parsed;
-      }
-    } catch (e) {
-      console.warn('Failed to load local storage state:', e);
-    }
-
+  private getDefaultState(): AppState {
     return {
       organizations: [INITIAL_ORG_A, INITIAL_ORG_B],
       projects: [INITIAL_PROJECT_A],
@@ -390,6 +405,9 @@ class Store {
       milestones: INITIAL_MILESTONES,
       onchainContributions: INITIAL_ONCHAIN_CONTRIBUTIONS,
       verifications: INITIAL_VERIFICATIONS,
+      batches: INITIAL_BATCHES,
+      tokens: INITIAL_TOKENS,
+      flags: [],
       currentUser: {
         id: 'u-admin-1',
         email: 'priya.sharma@sevajyoti.org',
@@ -435,7 +453,74 @@ class Store {
     };
   }
 
+  private loadState(): AppState {
+    if (typeof localStorage === 'undefined') {
+      return this.getDefaultState();
+    }
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!parsed.milestones || parsed.milestones.length === 0) parsed.milestones = INITIAL_MILESTONES;
+        if (!parsed.onchainContributions || parsed.onchainContributions.length === 0) parsed.onchainContributions = INITIAL_ONCHAIN_CONTRIBUTIONS;
+        if (!parsed.verifications) parsed.verifications = INITIAL_VERIFICATIONS;
+        if (!parsed.batches || parsed.batches.length === 0) parsed.batches = INITIAL_BATCHES;
+        if (!parsed.tokens || parsed.tokens.length === 0) parsed.tokens = INITIAL_TOKENS;
+        if (!parsed.flags) parsed.flags = [];
+
+        // Cleanse legacy synthetic or unrelated micropayment hashes from milestones
+        if (parsed.milestones) {
+          parsed.milestones.forEach((m: ProjectMilestone) => {
+            if (isSyntheticOrDemoHash(m.release_tx_hash) || m.release_tx_hash === '0xcd8cabca0067bdadb14657de318948eb3cf3a97bee9b0bd2f51f6138c9e4ca6b') {
+              m.release_tx_hash = null;
+              if (!m.tx_status || m.tx_status === 'VERIFIED_ONCHAIN') {
+                m.tx_status = m.status === 'RELEASED' ? 'DEMO_SIMULATED' : 'PENDING';
+              }
+            }
+          });
+        }
+        // Preserve genuine ReportAnchor transaction on Polygon Amoy
+        if (parsed.anchors) {
+          parsed.anchors.forEach((a: ReportAnchorRecord) => {
+            if (!a.tx_hash || a.tx_hash.toLowerCase().startsWith('0x9deb') || (a.contract_address && a.contract_address.toLowerCase() === '0x4e6b12f7178a9c29fbf80838971fce8d5c7f8f90')) {
+              a.tx_hash = '0x8e82ae53cba3c48347a6f54720903518f7076cceffe24bd458961552a1502a3b';
+              a.contract_address = '0xaee46f1a48e92E9C7cb47AC59aeE4B3B49B6976F';
+            }
+          });
+        }
+        // Cleanse legacy synthetic or unrelated micropayment hashes from on-chain contributions
+        if (parsed.onchainContributions) {
+          parsed.onchainContributions.forEach((c: OnchainContribution) => {
+            if (isSyntheticOrDemoHash(c.tx_hash)) {
+              c.tx_hash = null;
+              c.tx_status = 'DEMO_SIMULATED';
+            }
+          });
+        }
+        // Cleanse legacy synthetic or unrelated micropayment hashes from verifications
+        if (parsed.verifications) {
+          parsed.verifications.forEach((v: MilestoneVerification) => {
+            if (isSyntheticOrDemoHash(v.tx_hash)) {
+              v.tx_hash = null;
+              v.tx_status = 'DEMO_SIMULATED';
+            }
+          });
+        }
+
+        return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to load local storage state:', e);
+    }
+
+    return this.getDefaultState();
+  }
+
   private saveState(): void {
+    if (typeof localStorage === 'undefined') {
+      this.notify();
+      return;
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
     } catch (e) {
@@ -584,6 +669,9 @@ class Store {
       await supabase.from('expenses').upsert(INITIAL_EXPENSES);
       await supabase.from('evidence_files').upsert(INITIAL_EVIDENCE);
       await supabase.from('project_updates').upsert(INITIAL_UPDATES);
+      try {
+        await supabase.from('distribution_batches').upsert(INITIAL_BATCHES);
+      } catch (e) {}
     } catch (err) {
       console.warn('Initial seed push notice:', err);
     }
@@ -1160,6 +1248,274 @@ class Store {
       }
     }
     return verification;
+  }
+
+  // ==========================================
+  // --- Evidence Intelligence Engine ---
+  // ==========================================
+
+  public runEvidenceIntelligence(projectId: string): {
+    flags: EvidenceIntelligenceFlag[];
+    summary: EvidenceIntelligenceSummary;
+    annotatedExpenses: Expense[];
+  } {
+    const project = this.state.projects.find((p) => p.id === projectId);
+    if (!project) {
+      return {
+        flags: [],
+        summary: {
+          totalExpensesCount: 0,
+          totalExpensesAmount: 0,
+          withEvidenceCount: 0,
+          missingEvidenceCount: 0,
+          duplicateWarningsCount: 0,
+          amountMismatchCount: 0,
+          budgetOverrunAmount: 0,
+          isBudgetOverrun: false,
+          awaitingReviewCount: 0,
+          openFlagsCount: 0
+        },
+        annotatedExpenses: []
+      };
+    }
+
+    const expenses = this.state.expenses.filter((e) => e.project_id === projectId);
+    const projectEvidence = this.state.evidenceFiles.filter((ev) => ev.project_id === projectId);
+    // Boundary enforcement: only inspect evidence belonging to this authorized organization
+    const orgEvidence = this.state.evidenceFiles.filter((ev) => ev.organization_id === project.organization_id);
+
+    const result = evaluateEvidenceIntelligence(expenses, projectEvidence, project, orgEvidence);
+
+    // Sync any updated flags into store state
+    if (!this.state.flags) this.state.flags = [];
+    const nonProjectFlags = this.state.flags.filter((f) => f.project_id !== projectId);
+    this.state.flags = [...nonProjectFlags, ...result.flags];
+
+    return result;
+  }
+
+  public getEvidenceFlags(projectId?: string): EvidenceIntelligenceFlag[] {
+    const allFlags = this.state.flags || [];
+    if (!projectId) return allFlags;
+    return allFlags.filter((f) => f.project_id === projectId);
+  }
+
+  public async updateEvidenceFlagStatus(
+    flagId: string,
+    status: EvidenceFlagStatus,
+    resolutionNotes?: string
+  ): Promise<void> {
+    if (!this.state.flags) this.state.flags = [];
+    const idx = this.state.flags.findIndex((f) => f.id === flagId);
+    if (idx !== -1) {
+      this.state.flags[idx] = {
+        ...this.state.flags[idx],
+        status,
+        resolution_notes: resolutionNotes || this.state.flags[idx].resolution_notes,
+        resolved_by: this.state.currentUser?.id || null,
+        updated_at: new Date().toISOString()
+      };
+      this.saveState();
+      this.notify();
+    }
+  }
+
+  public async updateExpenseMetadata(
+    expenseId: string,
+    invoiceAmount?: number,
+    invoiceDate?: string,
+    extractedMetadata?: ExtractedMetadata
+  ): Promise<void> {
+    const idx = this.state.expenses.findIndex((e) => e.id === expenseId);
+    if (idx !== -1) {
+      this.state.expenses[idx] = {
+        ...this.state.expenses[idx],
+        invoice_amount: invoiceAmount !== undefined ? invoiceAmount : this.state.expenses[idx].invoice_amount,
+        invoice_date: invoiceDate !== undefined ? invoiceDate : this.state.expenses[idx].invoice_date,
+        extracted_metadata: extractedMetadata !== undefined ? extractedMetadata : this.state.expenses[idx].extracted_metadata
+      };
+      this.saveState();
+      this.notify();
+
+      if (supabase) {
+        try {
+          await supabase
+            .from('expenses')
+            .update({
+              invoice_amount: this.state.expenses[idx].invoice_amount,
+              invoice_date: this.state.expenses[idx].invoice_date,
+              extracted_metadata: this.state.expenses[idx].extracted_metadata
+            })
+            .eq('id', expenseId);
+        } catch (e) {
+          console.warn('Supabase expense metadata update notice:', e);
+        }
+      }
+    }
+  }
+
+  // ==========================================
+  // --- QR-Based Proof of Delivery ---
+  // ==========================================
+
+  public getDistributionBatches(projectId?: string): DistributionBatch[] {
+    const batches = this.state.batches || [];
+    if (!projectId) return batches;
+    return batches
+      .filter((b) => b.project_id === projectId)
+      .sort((a, b) => new Date(b.distribution_date).getTime() - new Date(a.distribution_date).getTime());
+  }
+
+  public async createDistributionBatch(
+    data: Omit<DistributionBatch, 'id' | 'acknowledged_count' | 'created_at' | 'updated_at'> & { id?: string; acknowledged_count?: number }
+  ): Promise<DistributionBatch> {
+    const now = new Date().toISOString();
+    const batch: DistributionBatch = {
+      ...data,
+      id: data.id || crypto.randomUUID(),
+      acknowledged_count: data.acknowledged_count || 0,
+      created_at: now,
+      updated_at: now
+    };
+
+    if (!this.state.batches) this.state.batches = [];
+    this.state.batches.push(batch);
+    this.saveState();
+    this.notify();
+
+    if (supabase) {
+      try {
+        await supabase.from('distribution_batches').insert([batch]);
+      } catch (e) {
+        console.warn('Supabase batch insert notice:', e);
+      }
+    }
+
+    return batch;
+  }
+
+  public getDeliveryTokens(batchId?: string): DeliveryToken[] {
+    const tokens = this.state.tokens || [];
+    if (!batchId) return tokens;
+    return tokens.filter((t) => t.batch_id === batchId);
+  }
+
+  public async storeDeliveryTokens(tokens: DeliveryToken[]): Promise<void> {
+    if (!this.state.tokens) this.state.tokens = [];
+    this.state.tokens.push(...tokens);
+    this.saveState();
+    this.notify();
+
+    if (supabase) {
+      try {
+        await supabase.from('delivery_tokens').insert(tokens);
+      } catch (e) {
+        console.warn('Supabase delivery tokens insert notice:', e);
+      }
+    }
+  }
+
+  public async redeemDeliveryToken(
+    rawTokenOrHash: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    batch?: DistributionBatch;
+    project?: Project;
+    redeemed_at?: string;
+    error?: string;
+  }> {
+    if (!this.state.tokens) this.state.tokens = [];
+
+    // Derive hash if a raw token was passed (e.g. "ft_ack_...")
+    let searchHash = rawTokenOrHash;
+    if (rawTokenOrHash.startsWith('ft_ack_')) {
+      searchHash = await hashToken(rawTokenOrHash);
+    }
+
+    const tokenIdx = this.state.tokens.findIndex(
+      (t) => t.token_hash.toLowerCase() === searchHash.toLowerCase()
+    );
+
+    if (tokenIdx === -1) {
+      return {
+        success: false,
+        error: 'INVALID_TOKEN',
+        message: 'This delivery acknowledgement link or QR code is invalid.'
+      };
+    }
+
+    const token = this.state.tokens[tokenIdx];
+    const batch = (this.state.batches || []).find((b) => b.id === token.batch_id);
+    const project = this.state.projects.find((p) => p.id === token.project_id);
+
+    if (token.status === 'REDEEMED') {
+      return {
+        success: false,
+        error: 'ALREADY_REDEEMED',
+        message: 'This delivery item has already been acknowledged.',
+        batch,
+        project,
+        redeemed_at: token.redeemed_at || undefined
+      };
+    }
+
+    if (token.status === 'REVOKED') {
+      return {
+        success: false,
+        error: 'REVOKED',
+        message: 'This acknowledgement token has been revoked by the issuing organization.'
+      };
+    }
+
+    if (new Date(token.expires_at).getTime() < Date.now()) {
+      token.status = 'EXPIRED';
+      this.saveState();
+      return {
+        success: false,
+        error: 'EXPIRED',
+        message: 'This delivery acknowledgement token has expired.'
+      };
+    }
+
+    // Mark as redeemed
+    const now = new Date().toISOString();
+    token.status = 'REDEEMED';
+    token.redeemed_at = now;
+
+    // Increment batch acknowledgement count atomically
+    if (batch) {
+      batch.acknowledged_count = (batch.acknowledged_count || 0) + 1;
+      batch.updated_at = now;
+    }
+
+    this.saveState();
+    this.notify();
+
+    if (supabase) {
+      try {
+        await supabase
+          .from('delivery_tokens')
+          .update({ status: 'REDEEMED', redeemed_at: now })
+          .eq('id', token.id);
+        if (batch) {
+          await supabase
+            .from('distribution_batches')
+            .update({ acknowledged_count: batch.acknowledged_count, updated_at: now })
+            .eq('id', batch.id);
+        }
+      } catch (e) {
+        console.warn('Supabase token redemption notice:', e);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Delivery receipt successfully acknowledged!',
+      batch,
+      project,
+      redeemed_at: now
+    };
   }
 
   // --- Demo Verification Helper: Tamper Simulator for Test T13 ---

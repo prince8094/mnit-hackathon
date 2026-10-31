@@ -11,12 +11,17 @@ import {
   EvidenceType,
   ReportSnapshot,
   ProjectMilestone,
-  OnchainContribution
+  OnchainContribution,
+  DistributionBatch,
+  EvidenceIntelligenceFlag
 } from '../types';
 import { calculateFinancialSummary } from '../lib/report-snapshot';
 import { formatINR, formatDate, formatDateTime, truncateHash, formatFileSize } from '../lib/formatters';
 import { parseAndValidateDonationsCsv, getSampleDonationsCsv } from '../lib/csv';
 import { hashFileSHA256, computeProjectKey } from '../lib/hashing';
+import { EvidenceIntelligenceSummary } from '../lib/evidence-intelligence';
+import { EvidenceIntelligenceSection } from '../components/evidence/EvidenceIntelligenceSection';
+import { ProofOfDeliverySection } from '../components/delivery/ProofOfDeliverySection';
 import { 
   isMetaMaskInstalled, 
   connectWallet, 
@@ -31,7 +36,8 @@ import {
   releaseMilestoneFundsOnchain,
   contributeOnchain,
   getAmoyExplorerTxUrl,
-  getAmoyExplorerAddressUrl
+  getAmoyExplorerAddressUrl,
+  classifyTransaction
 } from '../lib/blockchain';
 import { uploadEvidenceToIPFS, getIPFSGatewayUrl } from '../lib/ipfs';
 import { FinancialOverview } from '../components/charts/FinancialOverview';
@@ -55,7 +61,9 @@ import {
   Lock,
   Layers,
   Sparkles,
-  Info
+  Info,
+  ShieldAlert,
+  PackageCheck
 } from 'lucide-react';
 
 export const ProjectDetailPage: React.FC = () => {
@@ -63,7 +71,7 @@ export const ProjectDetailPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [project, setProject] = useState<Project | undefined>(undefined);
-  const [activeTab, setActiveTab] = useState<'overview' | 'milestones' | 'donations' | 'expenses' | 'updates' | 'report'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'milestones' | 'donations' | 'expenses' | 'intelligence' | 'delivery' | 'updates' | 'report'>('overview');
 
   // Project data states
   const [donations, setDonations] = useState<Donation[]>([]);
@@ -73,6 +81,20 @@ export const ProjectDetailPage: React.FC = () => {
   const [snapshots, setSnapshots] = useState<ReportSnapshot[]>([]);
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
   const [onchainContributions, setOnchainContributions] = useState<OnchainContribution[]>([]);
+  const [distributionBatches, setDistributionBatches] = useState<DistributionBatch[]>([]);
+  const [intelligenceFlags, setIntelligenceFlags] = useState<EvidenceIntelligenceFlag[]>([]);
+  const [intelligenceSummary, setIntelligenceSummary] = useState<EvidenceIntelligenceSummary>({
+    totalExpensesCount: 0,
+    totalExpensesAmount: 0,
+    withEvidenceCount: 0,
+    missingEvidenceCount: 0,
+    duplicateWarningsCount: 0,
+    amountMismatchCount: 0,
+    budgetOverrunAmount: 0,
+    isBudgetOverrun: false,
+    awaitingReviewCount: 0,
+    openFlagsCount: 0
+  });
 
   // Milestone submission modal
   const [submittingMilestone, setSubmittingMilestone] = useState<ProjectMilestone | null>(null);
@@ -166,6 +188,10 @@ export const ProjectDetailPage: React.FC = () => {
       setSnapshots(store.getSnapshots(id));
       setMilestones(store.getMilestones(id));
       setOnchainContributions(store.getOnchainContributions(id));
+      setDistributionBatches(store.getDistributionBatches(id));
+      const intelRes = store.runEvidenceIntelligence(id);
+      setIntelligenceSummary(intelRes.summary);
+      setIntelligenceFlags(intelRes.flags);
     };
 
     loadData();
@@ -796,6 +822,38 @@ export const ProjectDetailPage: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('intelligence')}
+            className={`pb-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === 'intelligence'
+                ? 'border-indigo-600 text-indigo-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-indigo-600" />
+            <span>Evidence Intelligence</span>
+            {intelligenceSummary.openFlagsCount > 0 && (
+              <span className="bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded-full text-[10px] font-bold">
+                {intelligenceSummary.openFlagsCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('delivery')}
+            className={`pb-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === 'delivery'
+                ? 'border-teal-600 text-teal-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <PackageCheck className="w-4 h-4 text-teal-600" />
+            <span>Proof of Delivery (QR)</span>
+            <span className="bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded-full text-[10px] font-bold">
+              {distributionBatches.length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('updates')}
             className={`pb-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
               activeTab === 'updates'
@@ -1069,20 +1127,37 @@ export const ProjectDetailPage: React.FC = () => {
                           </div>
                         )}
 
-                        {m.release_tx_hash && (
-                          <div className="pt-1 flex items-center justify-between font-mono text-[11px]">
-                            <span className="text-slate-500 font-sans">PolygonScan Release Tx:</span>
-                            <a
-                              href={getAmoyExplorerTxUrl(m.release_tx_hash)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-emerald-700 hover:text-emerald-900 font-semibold underline inline-flex items-center gap-1"
-                            >
-                              {m.release_tx_hash.slice(0, 12)}...{m.release_tx_hash.slice(-6)}
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          </div>
-                        )}
+                        {(() => {
+                          const txInfo = classifyTransaction(m.release_tx_hash, m.tx_status);
+                          if (txInfo.isVerifiedOnchain && txInfo.explorerUrl) {
+                            return (
+                              <div className="pt-1 flex items-center justify-between font-mono text-[11px]">
+                                <span className="text-slate-500 font-sans">PolygonScan Release Tx:</span>
+                                <a
+                                  href={txInfo.explorerUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-emerald-700 hover:text-emerald-900 font-semibold underline inline-flex items-center gap-1"
+                                >
+                                  {m.release_tx_hash?.slice(0, 12)}...{m.release_tx_hash?.slice(-6)}
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            );
+                          }
+                          if (m.status === 'RELEASED') {
+                            return (
+                              <div className="pt-1 flex items-center justify-between text-[11px]">
+                                <span className="text-slate-500 font-sans">Payout Verification:</span>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                  Demo Simulated Payout (Off-Chain)
+                                </span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     )}
 
@@ -1166,19 +1241,30 @@ export const ProjectDetailPage: React.FC = () => {
                         {formatDate(c.contributed_at)}
                       </td>
                       <td className="py-2.5 px-3">
-                        {c.tx_hash ? (
-                          <a
-                            href={getAmoyExplorerTxUrl(c.tx_hash)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-emerald-700 underline font-semibold inline-flex items-center gap-1"
-                          >
-                            {c.tx_hash.slice(0, 8)}...
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 font-sans">Off-chain deposit</span>
-                        )}
+                        {(() => {
+                          const txInfo = classifyTransaction(c.tx_hash, c.tx_status);
+                          if (txInfo.isVerifiedOnchain && txInfo.explorerUrl) {
+                            return (
+                              <a
+                                href={txInfo.explorerUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-emerald-700 underline font-semibold inline-flex items-center gap-1"
+                              >
+                                {c.tx_hash?.slice(0, 8)}...
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            );
+                          }
+                          if (txInfo.isDemo) {
+                            return (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 font-sans">
+                                Demo Simulated
+                              </span>
+                            );
+                          }
+                          return <span className="text-slate-400 font-sans">Off-chain deposit</span>;
+                        })()}
                       </td>
                     </tr>
                   ))}
@@ -1689,6 +1775,36 @@ export const ProjectDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB: EVIDENCE INTELLIGENCE */}
+      {activeTab === 'intelligence' && (
+        <EvidenceIntelligenceSection
+          project={project}
+          expenses={expenses}
+          evidenceFiles={evidenceFiles}
+          flags={intelligenceFlags}
+          summary={intelligenceSummary}
+          onRefresh={() => {
+            if (id) {
+              const intel = store.runEvidenceIntelligence(id);
+              setIntelligenceSummary(intel.summary);
+              setIntelligenceFlags(intel.flags);
+              setExpenses(store.getExpenses(id));
+            }
+          }}
+        />
+      )}
+
+      {/* TAB: PROOF OF DELIVERY */}
+      {activeTab === 'delivery' && (
+        <ProofOfDeliverySection
+          project={project}
+          batches={distributionBatches}
+          onRefresh={() => {
+            if (id) setDistributionBatches(store.getDistributionBatches(id));
+          }}
+        />
       )}
 
       {/* TAB 4: PROGRESS UPDATES */}

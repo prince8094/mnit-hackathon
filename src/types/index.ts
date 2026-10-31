@@ -38,6 +38,8 @@ export interface Project {
 
 export type OnchainMilestoneStatus = 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'RELEASED';
 
+export type TransactionClassification = 'VERIFIED_ONCHAIN' | 'DEMO_SIMULATED' | 'PENDING' | 'INVALID';
+
 export interface ProjectMilestone {
   id: string;
   organization_id: string;
@@ -53,6 +55,7 @@ export interface ProjectMilestone {
   reviewed_at?: string | null;
   review_reason?: string | null;
   release_tx_hash?: string | null;
+  tx_status?: TransactionClassification;
   created_at: string;
 }
 
@@ -63,6 +66,7 @@ export interface OnchainContribution {
   donor_wallet: string;
   amount_pol: number;
   tx_hash: string | null;
+  tx_status?: TransactionClassification;
   contributed_at: string;
 }
 
@@ -74,6 +78,7 @@ export interface MilestoneVerification {
   approved: boolean;
   review_reason: string;
   tx_hash?: string | null;
+  tx_status?: TransactionClassification;
   reviewed_at: string;
 }
 
@@ -92,6 +97,18 @@ export interface Donation {
   created_at: string;
 }
 
+export type EvidenceStatus = 'MISSING_EVIDENCE' | 'EVIDENCE_UPLOADED' | 'NEEDS_REVIEW' | 'REVIEWED' | 'FLAGGED';
+
+export interface ExtractedMetadata {
+  confidence?: number;
+  extracted_amount?: number;
+  extracted_vendor?: string;
+  extracted_date?: string;
+  extracted_invoice_number?: string;
+  ocr_provider?: string;
+  raw_text_snippet?: string;
+}
+
 export interface Expense {
   id: string;
   organization_id: string;
@@ -102,7 +119,78 @@ export interface Expense {
   description: string;
   vendor_label?: string | null;
   payment_reference?: string | null;
+  invoice_amount?: number | null;
+  invoice_date?: string | null;
+  evidence_status?: EvidenceStatus;
+  extracted_metadata?: ExtractedMetadata | null;
   created_by?: string;
+  created_at: string;
+}
+
+export type EvidenceFlagType = 'DUPLICATE_EVIDENCE' | 'AMOUNT_MISMATCH' | 'MISSING_EVIDENCE' | 'BUDGET_OVERRUN' | 'MISSING_METADATA';
+export type EvidenceFlagSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type EvidenceFlagStatus = 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED' | 'DISMISSED';
+
+export interface EvidenceIntelligenceFlag {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  expense_id: string;
+  flag_type: EvidenceFlagType;
+  severity: EvidenceFlagSeverity;
+  message: string;
+  details?: {
+    recorded_amount?: number;
+    invoice_amount?: number;
+    difference?: number;
+    duplicate_cid?: string;
+    duplicate_expense_id?: string;
+    duplicate_sha256?: string;
+    allocated_budget?: number;
+    total_spent?: number;
+    overrun?: number;
+    missing_fields?: string[];
+  } | Record<string, any>;
+  status: EvidenceFlagStatus;
+  resolved_by?: string | null;
+  resolution_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BatchStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'ARCHIVED';
+
+export interface DistributionBatch {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  batch_number: string;
+  batch_name: string;
+  distribution_date: string;
+  location_or_institution: string;
+  item_description: string;
+  expected_quantity: number;
+  acknowledged_count: number;
+  public_description?: string | null;
+  distribution_evidence_cid?: string | null;
+  status: BatchStatus;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TokenStatus = 'ISSUED' | 'REDEEMED' | 'REVOKED' | 'EXPIRED';
+
+export interface DeliveryToken {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  batch_id: string;
+  token_hash: string;
+  recipient_index: number;
+  status: TokenStatus;
+  expires_at: string;
+  redeemed_at?: string | null;
   created_at: string;
 }
 
@@ -190,6 +278,12 @@ export interface ReportSnapshotData {
   expensesByCategory: ReportSnapshotCategoryExpense[];
   evidenceSummary: ReportSnapshotEvidenceSummary[];
   updates: ReportSnapshotProjectUpdate[];
+  proofOfDelivery?: {
+    totalExpected: number;
+    totalAcknowledged: number;
+    batchesCount: number;
+    acknowledgementRatePercent: number;
+  };
   publishedAt: string;
 }
 

@@ -8,6 +8,7 @@ import { NewProjectPage } from '../pages/NewProjectPage';
 import { ProjectDetailPage } from '../pages/ProjectDetailPage';
 import { VerifierDashboardPage } from '../pages/VerifierDashboardPage';
 import { PublicReportPage } from '../pages/PublicReportPage';
+import { RecipientAcknowledgementPage } from '../pages/RecipientAcknowledgementPage';
 import { store } from '../lib/store';
 
 const Layout: React.FC = () => {
@@ -132,6 +133,10 @@ export const router = createBrowserRouter([
       {
         path: 'r/:slug',
         element: <PublicReportPage />
+      },
+      {
+        path: 'ack/:token',
+        element: <RecipientAcknowledgementPage />
       },
       {
         path: '*',

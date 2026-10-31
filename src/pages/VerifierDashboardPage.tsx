@@ -11,7 +11,8 @@ import {
   getAmoyExplorerTxUrl,
   getAmoyExplorerAddressUrl,
   AMOY_CHAIN_ID,
-  DEFAULT_ESCROW_CONTRACT_ADDRESS
+  DEFAULT_ESCROW_CONTRACT_ADDRESS,
+  classifyTransaction
 } from '../lib/blockchain';
 import { getIPFSGatewayUrl } from '../lib/ipfs';
 import { 
@@ -22,12 +23,16 @@ import {
   ExternalLink, 
   Clock, 
   FileText, 
-  Wallet,
-  Lock,
-  Layers,
-  ArrowRight,
-  Info
+  Wallet, 
+  Lock, 
+  Layers, 
+  ArrowRight, 
+  Info,
+  ShieldAlert,
+  PackageCheck
 } from 'lucide-react';
+import { EvidenceIntelligenceSection } from '../components/evidence/EvidenceIntelligenceSection';
+import { ProofOfDeliverySection } from '../components/delivery/ProofOfDeliverySection';
 
 export const VerifierDashboardPage: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(store.getCurrentUser());
@@ -44,6 +49,8 @@ export const VerifierDashboardPage: React.FC = () => {
   const [reviewReason, setReviewReason] = useState<string>('Verified independent invoices and distribution photos on IPFS.');
   const [verifyingInProgress, setVerifyingInProgress] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string; txHash?: string | null } | null>(null);
+  const [verifierTab, setVerifierTab] = useState<'milestones' | 'intelligence' | 'delivery'>('milestones');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   useEffect(() => {
     return store.subscribe(() => {
@@ -288,6 +295,49 @@ export const VerifierDashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* Auditor Desk Navigation Tabs */}
+      <div className="border-b border-slate-200">
+        <nav className="flex space-x-6">
+          <button
+            onClick={() => setVerifierTab('milestones')}
+            className={`pb-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              verifierTab === 'milestones'
+                ? 'border-indigo-600 text-indigo-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-amber-600" />
+            <span>Pending Milestone Approvals ({submittedMilestones.length})</span>
+          </button>
+
+          <button
+            onClick={() => setVerifierTab('intelligence')}
+            className={`pb-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              verifierTab === 'intelligence'
+                ? 'border-indigo-600 text-indigo-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-indigo-600" />
+            <span>Evidence Intelligence & Flag Resolution</span>
+          </button>
+
+          <button
+            onClick={() => setVerifierTab('delivery')}
+            className={`pb-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              verifierTab === 'delivery'
+                ? 'border-teal-600 text-teal-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <PackageCheck className="w-4 h-4 text-teal-600" />
+            <span>Proof of Delivery Inspection</span>
+          </button>
+        </nav>
+      </div>
+
+      {verifierTab === 'milestones' && (
+      <>
       {/* Awaiting Review Queue */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -473,19 +523,30 @@ export const VerifierDashboardPage: React.FC = () => {
                       {m.review_reason || 'Verified'}
                     </td>
                     <td className="py-3 px-4 font-mono text-[11px]">
-                      {m.release_tx_hash ? (
-                        <a
-                          href={getAmoyExplorerTxUrl(m.release_tx_hash)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-emerald-700 underline font-semibold inline-flex items-center gap-1"
-                        >
-                          {m.release_tx_hash.slice(0, 8)}...
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
+                      {(() => {
+                        const txInfo = classifyTransaction(m.release_tx_hash, m.tx_status);
+                        if (txInfo.isVerifiedOnchain && txInfo.explorerUrl) {
+                          return (
+                            <a
+                              href={txInfo.explorerUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-700 underline font-semibold inline-flex items-center gap-1"
+                            >
+                              {m.release_tx_hash?.slice(0, 8)}...
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          );
+                        }
+                        if (m.status === 'RELEASED') {
+                          return (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 font-sans">
+                              Demo Simulated
+                            </span>
+                          );
+                        }
+                        return <span className="text-slate-400 font-sans">—</span>;
+                      })()}
                     </td>
                   </tr>
                 ))}
@@ -494,6 +555,69 @@ export const VerifierDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+      </>
+      )}
+
+      {/* Auditor Tab: Evidence Intelligence */}
+      {verifierTab === 'intelligence' && (
+        <div className="space-y-4">
+          {projects.length > 0 && (
+            <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-600">Select Project for Audit:</span>
+              <select
+                value={selectedProjectId || projects[0]?.id}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {projects.length > 0 && (
+            <EvidenceIntelligenceSection
+              project={projects.find((p) => p.id === (selectedProjectId || projects[0]?.id)) || projects[0]}
+              expenses={store.getExpenses(selectedProjectId || projects[0]?.id)}
+              evidenceFiles={store.getEvidenceFiles(selectedProjectId || projects[0]?.id)}
+              flags={store.getEvidenceFlags(selectedProjectId || projects[0]?.id)}
+              summary={store.runEvidenceIntelligence(selectedProjectId || projects[0]?.id).summary}
+              isVerifier={true}
+              onRefresh={() => setAllMilestones(store.getAllMilestones())}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Auditor Tab: Proof of Delivery */}
+      {verifierTab === 'delivery' && (
+        <div className="space-y-4">
+          {projects.length > 0 && (
+            <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-600">Select Project for Delivery Inspection:</span>
+              <select
+                value={selectedProjectId || projects[0]?.id}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {projects.length > 0 && (
+            <ProofOfDeliverySection
+              project={projects.find((p) => p.id === (selectedProjectId || projects[0]?.id)) || projects[0]}
+              batches={store.getDistributionBatches(selectedProjectId || projects[0]?.id)}
+              isVerifier={true}
+              onRefresh={() => setAllMilestones(store.getAllMilestones())}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 };
