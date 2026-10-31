@@ -254,7 +254,7 @@ const INITIAL_ONCHAIN_CONTRIBUTIONS: OnchainContribution[] = [
     project_id: INITIAL_PROJECT_A.id,
     donor_wallet: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
     amount_pol: 40,
-    tx_hash: '0x88f2a1b9c7d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6',
+    tx_hash: '0x620c75a552e693404b527aa5db824202d2d5b2916a750cd1617dba105b73684f',
     contributed_at: '2026-10-02T11:00:00Z'
   },
   {
@@ -263,7 +263,7 @@ const INITIAL_ONCHAIN_CONTRIBUTIONS: OnchainContribution[] = [
     project_id: INITIAL_PROJECT_A.id,
     donor_wallet: '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65',
     amount_pol: 60,
-    tx_hash: '0x99a3b2c1d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1',
+    tx_hash: '0x7425df0f820cf075dd83044f53afee837f4df44ed943430d3a5fc662360be11e',
     contributed_at: '2026-10-04T15:30:00Z'
   }
 ];
@@ -276,8 +276,21 @@ const INITIAL_VERIFICATIONS: MilestoneVerification[] = [
     verifier_wallet: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
     approved: true,
     review_reason: 'Verified 60 stationery sets and school bags purchased from registered vendor with tax invoice.',
-    tx_hash: '0x7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5a4',
+    tx_hash: '0xb217b4299fdd598c7c880e5db2a0682dbfe653f4938e694fd31ad8830a9f0809',
     reviewed_at: '2026-10-16T14:30:00Z'
+  }
+];
+
+const INITIAL_ANCHORS: ReportAnchorRecord[] = [
+  {
+    id: 'a1111111-0000-0000-0000-000000000001',
+    report_snapshot_id: 's1111111-0000-0000-0000-000000000001',
+    chain_id: 80002,
+    contract_address: '0xaee46f1a48e92E9C7cb47AC59aeE4B3B49B6976F',
+    tx_hash: '0xd7c561ff41a211e9c32c7b464eaa319adfb3a0e9e4f60d5719ee0a53e6cec833',
+    publisher_wallet: '0x38681cC8b95830843080AFf65A6D0a45E1E9f4fF',
+    anchor_status: 'MINED',
+    created_at: '2026-10-31T05:36:00Z'
   }
 ];
 
@@ -341,6 +354,23 @@ class Store {
             }
           });
         }
+        if (parsed.onchainContributions) {
+          parsed.onchainContributions.forEach((c: OnchainContribution) => {
+            if (c.tx_hash === '0x88f2a1b9c7d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6') {
+              c.tx_hash = '0x620c75a552e693404b527aa5db824202d2d5b2916a750cd1617dba105b73684f';
+            }
+            if (c.tx_hash === '0x99a3b2c1d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1') {
+              c.tx_hash = '0x7425df0f820cf075dd83044f53afee837f4df44ed943430d3a5fc662360be11e';
+            }
+          });
+        }
+        if (parsed.verifications) {
+          parsed.verifications.forEach((v: MilestoneVerification) => {
+            if (v.tx_hash === '0x7e6d5c4b3a2918273645e5d4c3b2a1f0e9d8c7b6a5e4d3c2b1a0f9e8d7c6b5a4') {
+              v.tx_hash = '0xb217b4299fdd598c7c880e5db2a0682dbfe653f4938e694fd31ad8830a9f0809';
+            }
+          });
+        }
 
         return parsed;
       }
@@ -356,7 +386,7 @@ class Store {
       evidenceFiles: INITIAL_EVIDENCE,
       updates: INITIAL_UPDATES,
       snapshots: [],
-      anchors: [],
+      anchors: INITIAL_ANCHORS,
       milestones: INITIAL_MILESTONES,
       onchainContributions: INITIAL_ONCHAIN_CONTRIBUTIONS,
       verifications: INITIAL_VERIFICATIONS,
@@ -432,7 +462,7 @@ class Store {
       if (session?.user) {
         const email = session.user.email || 'user@ngo.org';
         const fullName = session.user.user_metadata?.full_name || email.split('@')[0];
-        
+
         // Find existing organization or generate one for this Google user
         let userOrg = this.state.organizations.find(o => o.created_by === session.user.id);
         if (!userOrg) {
@@ -444,7 +474,7 @@ class Store {
             created_at: new Date().toISOString()
           };
           this.state.organizations.push(userOrg);
-          
+
           // Save to Supabase
           if (supabase) {
             try {
@@ -718,7 +748,7 @@ class Store {
       return this.state.projects.filter(p => p.organization_id === targetOrg);
     }
 
-    return this.state.projects.filter(p => 
+    return this.state.projects.filter(p =>
       p.organization_id === targetOrg || p.id === INITIAL_PROJECT_A.id
     );
   }
@@ -950,8 +980,8 @@ class Store {
     if (!project) throw new Error('Project not found');
 
     const existingSnapshots = this.getSnapshots(projectId);
-    const nextVersion = existingSnapshots.length > 0 
-      ? Math.max(...existingSnapshots.map(s => s.version)) + 1 
+    const nextVersion = existingSnapshots.length > 0
+      ? Math.max(...existingSnapshots.map(s => s.version)) + 1
       : 1;
 
     const donations = this.getDonations(projectId);
