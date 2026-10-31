@@ -129,3 +129,10 @@ As specified in FundTrail's design principles:
 2. It **does not** prove that an uploaded invoice is authentic in the physical world.
 3. All activity milestones are honestly labeled as `Self-Reported by NGO` unless verified by a real human auditor.
 
+---
+
+## 🛠 Developer Notes & Local Verification
+
+- **Environment:** Node.js v18+, MetaMask configured for Polygon Amoy testnet.
+- **Integrity Testing:** Run `npm test tests/report-hash.test.ts` to validate deterministic canonical JSON serialization and Web Crypto SHA-256 calculation against test fixtures.
+- **Contract Interfacing:** Ensure local `.env` specifies valid Amoy RPC endpoint and deployed anchor addresses before initiating on-chain transactions.
