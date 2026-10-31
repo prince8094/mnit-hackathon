@@ -1,68 +1,112 @@
 import { transcribeWithGemini, checkRateLimit } from '../../src/lib/gemini-voice-service';
 
 export const config = {
-  maxDuration: 30, // 30s timeout
+  maxDuration: 30,
 };
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(req: any, res?: any): Promise<any> {
+  const isNode = res && typeof res.status === 'function';
+
+  // 1. CORS headers
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
   };
 
-  if (req.method === 'OPTIONS') {
+  const method = (req.method || 'GET').toUpperCase();
+
+  if (method === 'OPTIONS') {
+    if (isNode) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+      return res.status(204).end();
+    }
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+  if (method !== 'POST') {
+    const errorBody = { success: false, error: 'Method not allowed' };
+    if (isNode) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+      return res.status(405).json(errorBody);
+    }
+    return new Response(JSON.stringify(errorBody), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  // Rate limiting check
-  const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'anonymous-client';
-  if (!checkRateLimit(clientIp)) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Too many voice requests. Please slow down and try again in a minute.',
-      }),
-      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+  // 2. Extract Client IP for rate limiting
+  let clientIp = 'anonymous-client';
+  if (isNode) {
+    clientIp =
+      req.headers['x-forwarded-for']?.toString() ||
+      req.headers['x-real-ip']?.toString() ||
+      req.socket?.remoteAddress ||
+      'anonymous-client';
+  } else if (req.headers && typeof req.headers.get === 'function') {
+    clientIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'anonymous-client';
   }
 
+  if (!checkRateLimit(clientIp)) {
+    const rateLimitBody = {
+      success: false,
+      error: 'Too many voice requests. Please slow down and try again in a minute.',
+    };
+    if (isNode) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+      return res.status(429).json(rateLimitBody);
+    }
+    return new Response(JSON.stringify(rateLimitBody), {
+      status: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // 3. Parse Body
   try {
-    const contentType = req.headers.get('content-type') || '';
     let audioBase64 = '';
     let mimeType = 'audio/webm';
     let language: 'hi' | 'en' | undefined = undefined;
 
-    if (contentType.includes('application/json')) {
-      const body = await req.json();
+    if (isNode) {
+      let body = req.body;
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch {}
+      }
+      if (!body && req.readable) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        } catch {}
+      }
+      body = body || {};
       audioBase64 = body.audioBase64 || '';
       mimeType = body.mimeType || 'audio/webm';
       language = body.language;
-    } else if (contentType.includes('multipart/form-data')) {
-      const formData = await req.formData();
-      const file = formData.get('audio') || formData.get('file');
-      language = (formData.get('language') as 'hi' | 'en') || undefined;
-
-      if (file && typeof file !== 'string') {
-        const arrayBuf = await (file as Blob).arrayBuffer();
-        audioBase64 = Buffer.from(arrayBuf).toString('base64');
-        mimeType = (file as Blob).type || 'audio/webm';
-      }
     } else {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Unsupported content-type. Please send application/json with audioBase64 or multipart/form-data.',
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      const contentType = req.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const body = await req.json();
+        audioBase64 = body.audioBase64 || '';
+        mimeType = body.mimeType || 'audio/webm';
+        language = body.language;
+      } else if (contentType.includes('multipart/form-data')) {
+        const formData = await req.formData();
+        const file = formData.get('audio') || formData.get('file');
+        language = (formData.get('language') as 'hi' | 'en') || undefined;
+
+        if (file && typeof file !== 'string') {
+          const arrayBuf = await (file as Blob).arrayBuffer();
+          audioBase64 = Buffer.from(arrayBuf).toString('base64');
+          mimeType = (file as Blob).type || 'audio/webm';
+        }
+      }
     }
 
     const result = await transcribeWithGemini({
@@ -72,18 +116,28 @@ export default async function handler(req: Request): Promise<Response> {
     });
 
     const statusCode = result.success ? 200 : result.isPendingConfig ? 503 : 400;
+
+    if (isNode) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+      return res.status(statusCode).json(result);
+    }
+
     return new Response(JSON.stringify(result), {
       status: statusCode,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err: any) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: err.message || 'An unexpected error occurred during transcription.',
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    const errorBody = {
+      success: false,
+      error: err.message || 'An unexpected error occurred during transcription.',
+    };
+    if (isNode) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.setHeader(k, v));
+      return res.status(500).json(errorBody);
+    }
+    return new Response(JSON.stringify(errorBody), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 }
-

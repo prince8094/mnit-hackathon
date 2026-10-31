@@ -496,8 +496,23 @@ export async function transcribeAudioWithGemini(
     }),
   });
 
-  const data = await res.json();
+  const rawText = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    if (res.status === 503) {
+      throw new Error('Gemini Voice service pending server configuration (GEMINI_API_KEY).');
+    }
+    throw new Error(
+      `Voice server returned status ${res.status}. Please ensure GEMINI_API_KEY is configured in Vercel.`
+    );
+  }
+
   if (!res.ok || !data.success) {
+    if (data.isPendingConfig) {
+      throw new Error('Google Gemini Voice pending server configuration (GEMINI_API_KEY).');
+    }
     throw new Error(data.error || 'Failed to transcribe audio with Google Gemini');
   }
 
@@ -525,8 +540,23 @@ export async function synthesizeSpeechWithGemini(
     }),
   });
 
-  const data = await res.json();
+  const rawText = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    if (res.status === 503) {
+      throw new Error('Gemini Voice service pending server configuration (GEMINI_API_KEY).');
+    }
+    throw new Error(
+      `Voice server returned status ${res.status}. Please ensure GEMINI_API_KEY is configured in Vercel.`
+    );
+  }
+
   if (!res.ok || !data.success || !data.audioBase64) {
+    if (data.isPendingConfig) {
+      throw new Error('Google Gemini Voice pending server configuration (GEMINI_API_KEY).');
+    }
     throw new Error(data.error || 'Failed to generate speech with Google Gemini');
   }
 

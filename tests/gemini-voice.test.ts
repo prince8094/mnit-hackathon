@@ -180,14 +180,17 @@ describe('Google Gemini Voice Assistant Integration', () => {
   it('8. Avoids redundant server requests by caching synthesized speech in session', async () => {
     const mockAudioData = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
     
+    const mockResponsePayload = JSON.stringify({
+      success: true,
+      audioBase64: mockAudioData,
+      mimeType: 'audio/wav'
+    });
+
     // Mock global fetch
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        success: true,
-        audioBase64: mockAudioData,
-        mimeType: 'audio/wav'
-      })
+      text: async () => mockResponsePayload,
+      json: async () => JSON.parse(mockResponsePayload)
     });
     vi.stubGlobal('fetch', fetchMock);
 
