@@ -56,6 +56,42 @@ Donors require **no login** and **no crypto wallet**:
 
 ## 🏗 Architecture & Tech Stack
 
+### System Flow & Verification Architecture
+
+```text
++-----------------------------------------------------------------------------+
+|                         1. MULTI-CHANNEL INGESTION                          |
+|   * CSV Bulk Upload (UPI / Bank)   * Voice Assistant   * Invoice Evidence   |
++--------------------------------------|--------------------------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                      2. PROCESSING & CANONICALIZATION                       |
+|   * Evidence Intelligence (OCR & Duplicate Detection)                       |
+|   * Deterministic JSON Key Sorting (RFC-8785 Canonicalization)              |
+|   * Web Crypto SHA-256 Fingerprint Hash Generation (bytes32)                |
++--------------------------------------|--------------------------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                       3. ON-CHAIN ANCHORING & ESCROW                        |
+|                     [ Polygon Amoy Testnet - Chain 80002 ]                  |
+|   * ReportAnchor.sol: Immutably anchors cryptographic snapshot hash         |
+|   * FundTrailMilestoneEscrow.sol: Locks funds until verifier approves proof |
++--------------------------------------|--------------------------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                     4. ZERO-FRICTION PUBLIC VERIFICATION                    |
+|   * Public Donor View: /r/:slug (Zero Wallet / Zero Crypto Required)        |
+|   * Real-Time Client Verification: Browser re-calculates SHA-256 live       |
+|   * Tamper Detection: Status badge turns to MISMATCH if data is altered     |
+|   * Proof-of-Delivery: Beneficiary QR / SMS token acknowledgement           |
++-----------------------------------------------------------------------------+
+```
+
+### Core Technologies
+
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Lucide React
 - **Blockchain:** Ethers.js v6, Solidity 0.8.20 (`ReportAnchor.sol`), Polygon Amoy Testnet (`80002`)
 - **Backend / Database:** Supabase PostgreSQL with Row Level Security (RLS) policies (`supabase/migrations/001_initial_schema.sql`)
