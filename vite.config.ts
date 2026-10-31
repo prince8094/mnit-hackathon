@@ -3,7 +3,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { transcribeWithGemini, speakWithGemini } from './src/lib/gemini-voice-service';
 
-function geminiVoiceServerPlugin() {
+function geminiVoiceServerPlugin(geminiApiKey: string) {
   return {
     name: 'gemini-voice-middleware',
     configureServer(server: any) {
@@ -31,7 +31,7 @@ function geminiVoiceServerPlugin() {
               audioBase64: body.audioBase64,
               mimeType: body.mimeType,
               language: body.language,
-            });
+            }, geminiApiKey);
 
             res.statusCode = result.success ? 200 : result.isPendingConfig ? 503 : 400;
             res.setHeader('Content-Type', 'application/json');
@@ -66,7 +66,7 @@ function geminiVoiceServerPlugin() {
               text: body.text,
               language: body.language,
               voice: body.voice,
-            });
+            }, geminiApiKey);
 
             if (!result.success) {
               res.statusCode = result.isPendingConfig ? 503 : 400;
@@ -174,9 +174,14 @@ function pinataServerPlugin(pinataJwt: string) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const pinataJwt = env.PINATA_JWT || process.env.PINATA_JWT || '';
+  const geminiApiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+
+  if (geminiApiKey) {
+    process.env.GEMINI_API_KEY = geminiApiKey;
+  }
 
   return {
-    plugins: [react(), pinataServerPlugin(pinataJwt), geminiVoiceServerPlugin()],
+    plugins: [react(), pinataServerPlugin(pinataJwt), geminiVoiceServerPlugin(geminiApiKey)],
     server: {
       port: 5173,
       host: true

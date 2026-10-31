@@ -167,11 +167,11 @@ Instructions:
 - If spoken in English, transcribe in English.
 - Output ONLY the transcribed text. Do not add quotes, commentary, markdown headings, or conversational pleasantries.`;
 
-    // Attempt primary model, with fallback to gemini-2.5-flash / gemini-2.0-flash if preview model is unavailable
+    // Attempt primary model, with fallback to latest flash models
     const modelsToTry = [
       targetModel,
-      'gemini-2.5-flash',
-      'gemini-2.0-flash'
+      'gemini-3.8-flash',
+      'gemini-2.5-flash'
     ];
 
     let lastError: any = null;
@@ -194,14 +194,29 @@ Instructions:
           ]
         });
 
-        if (response && response.text) {
+        // 1. Check for audioTranscription parts (used by gemini-3.5-transcribe)
+        const parts = response.candidates?.[0]?.content?.parts || [];
+        for (const part of parts as any[]) {
+          if (part.audioTranscription && part.audioTranscription.text) {
+            transcribedText += part.audioTranscription.text;
+          } else if (part.text) {
+            transcribedText += part.text;
+          }
+        }
+
+        // 2. Fallback to response.text if parts didn't provide it
+        if (!transcribedText && response.text) {
           transcribedText = response.text.trim();
-          if (transcribedText) break;
+        }
+
+        if (transcribedText.trim()) {
+          transcribedText = transcribedText.trim();
+          break;
         }
       } catch (err: any) {
         lastError = err;
-        // If 404 model not found, try next model in fallback list
-        if (err.status === 404 || err.message?.includes('not found') || err.message?.includes('unsupported model')) {
+        // If 404 model not found or not supported, try next model in fallback list
+        if (err.status === 404 || err.message?.includes('not found') || err.message?.includes('unsupported model') || err.message?.includes('no longer available')) {
           continue;
         }
         throw err;
@@ -285,8 +300,9 @@ export async function speakWithGemini(
 
     const modelsToTry = [
       targetModel,
-      'gemini-2.5-flash',
-      'gemini-2.0-flash'
+      'gemini-3.8-flash-tts',
+      'gemini-2.5-flash-preview-tts',
+      'gemini-3.1-flash-tts-preview'
     ];
 
     let lastError: any = null;
@@ -328,7 +344,13 @@ export async function speakWithGemini(
         if (audioData) break;
       } catch (err: any) {
         lastError = err;
-        if (err.status === 404 || err.message?.includes('not found') || err.message?.includes('unsupported model')) {
+        if (
+          err.status === 404 ||
+          err.message?.includes('not found') ||
+          err.message?.includes('unsupported model') ||
+          err.message?.includes('no longer available') ||
+          err.message?.includes('only supports text')
+        ) {
           continue;
         }
         throw err;

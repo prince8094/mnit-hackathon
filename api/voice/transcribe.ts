@@ -76,13 +76,15 @@ export default async function handler(req: any, res?: any): Promise<any> {
           body = JSON.parse(body);
         } catch {}
       }
-      if (!body && req.readable) {
-        const chunks: Buffer[] = [];
-        for await (const chunk of req) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
+      if (!body && req.readable && !req.readableEnded && typeof req[Symbol.asyncIterator] === 'function') {
         try {
-          body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          if (chunks.length > 0) {
+            body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          }
         } catch {}
       }
       body = body || {};
